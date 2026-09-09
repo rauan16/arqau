@@ -7,55 +7,9 @@ from app.schemas.ai import WithdrawalAnalysis, ChatRequest, ChatResponse
 from app.services.ai_service import analyze_withdrawal, chat_with_user
 from app.api.v1.auth import get_current_user
 from app.config import get_settings
-from openai import OpenAI, APIStatusError, RateLimitError
-import json
 
 settings = get_settings()
 router = APIRouter(prefix="/ai", tags=["ai"])
-
-
-@router.get("/diagnostic")
-async def ai_diagnostic():
-    key_present = bool(settings.openai_api_key)
-    result = {
-        "openai_api_key_present": key_present,
-        "openai_model": settings.openai_model,
-    }
-    if not key_present:
-        result["status"] = "no_key"
-        return result
-
-    client = OpenAI(api_key=settings.openai_api_key)
-    try:
-        completion = client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[{"role": "user", "content": "Reply with exactly: diagnostic-ok"}],
-            max_tokens=10,
-        )
-        result["status"] = "ok"
-        result["provider_status"] = completion.choices[0].message.content.strip() if completion.choices else "empty"
-        return result
-    except RateLimitError as e:
-        result["status"] = "error"
-        result["error_type"] = "rate_limit"
-        result["error_code"] = "rate_limit"
-        result["http_status"] = 429
-        result["sanitized_message"] = str(e)[:200]
-        return result
-    except APIStatusError as e:
-        result["status"] = "error"
-        result["error_type"] = "api_status"
-        result["error_code"] = e.code or "unknown"
-        result["http_status"] = e.status_code
-        result["sanitized_message"] = str(e)[:200]
-        return result
-    except Exception as e:
-        result["status"] = "error"
-        result["error_type"] = "unexpected"
-        result["error_code"] = "unknown"
-        result["http_status"] = None
-        result["sanitized_message"] = str(e)[:200]
-        return result
 
 
 @router.post("/analyze-withdrawal", response_model=WithdrawalAnalysis)
