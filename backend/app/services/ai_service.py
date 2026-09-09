@@ -1,10 +1,43 @@
 import json
-from openai import OpenAI, RateLimitError, APIStatusError
+import logging
+import os
+from openai import OpenAI, RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
 from app.config import get_settings
 
 settings = get_settings()
 
-client = OpenAI(api_key=settings.openai_api_key)
+logger = logging.getLogger("arqau.ai")
+
+
+def _build_client():
+    """Build the OpenAI-compatible client.
+
+    Supports both OpenAI and OpenRouter providers. If the API key looks like
+    an OpenRouter key (sk-or-...), the base URL is switched to OpenRouter.
+    """
+    api_key = settings.openai_api_key or ""
+    is_openrouter = api_key.startswith("sk-or-")
+
+    client_kwargs = {
+        "api_key": api_key,
+        "timeout": 30.0,
+    }
+    if is_openrouter:
+        client_kwargs["base_url"] = "https://openrouter.ai/api/v1"
+        provider = "openrouter"
+    else:
+        provider = "openai"
+
+    logger.info(
+        "AI client initialized: provider=%s model=%s api_key_present=%s",
+        provider,
+        settings.openai_model,
+        bool(api_key),
+    )
+    return OpenAI(**client_kwargs), provider
+
+
+client, PROVIDER = _build_client()
 
 
 def build_withdrawal_prompt(ctx: dict) -> str:
@@ -80,6 +113,19 @@ Rules:
 Return ONLY valid JSON with keys: response, disclaimer."""
 
 
+def _safe_log_error(context: str, exc: Exception, **extra):
+    """Log AI errors without exposing the API key."""
+    logger.error(
+        "AI request failed: context=%s provider=%s model=%s error_type=%s error=%s",
+        context,
+        PROVIDER,
+        settings.openai_model,
+        type(exc).__name__,
+        str(exc)[:500],
+        extra={k: v for k, v in extra.items() if k != "api_key"},
+    )
+
+
 async def analyze_withdrawal(ctx: dict) -> dict:
     prompt = build_withdrawal_prompt(ctx)
     try:
@@ -104,14 +150,25 @@ async def analyze_withdrawal(ctx: dict) -> dict:
         result.setdefault("total_expenses", ctx.get("total_expenses", 0))
         result.setdefault("net_balance", ctx.get("net_balance", 0))
         return result
-    except RateLimitError:
+    except APITimeoutError as e:
+        _safe_log_error("analyze_withdrawal", e, timeout=30.0)
+        raise RuntimeError("AI_TIMEOUT")
+    except APIConnectionError as e:
+        _safe_log_error("analyze_withdrawal", e)
+        raise RuntimeError("AI_CONNECTION_ERROR")
+    except RateLimitError as e:
+        _safe_log_error("analyze_withdrawal", e, status_code=429)
         raise RuntimeError("AI_QUOTA_EXCEEDED")
     except APIStatusError as e:
-        if e.status_code == 429 or "quota" in str(e).lower():
+        _safe_log_error("analyze_withdrawal", e, status_code=e.status_code)
+        if e.status_code == 429:
             raise RuntimeError("AI_QUOTA_EXCEEDED")
-        raise RuntimeError(f"OpenAI error: {str(e)}")
+        if e.status_code in (401, 403):
+            raise RuntimeError("AI_AUTH_FAILED")
+        raise RuntimeError(f"AI_HTTP_{e.status_code}")
     except Exception as e:
-        raise RuntimeError(f"OpenAI error: {str(e)}")
+        _safe_log_error("analyze_withdrawal", e)
+        raise RuntimeError("AI_UNKNOWN_ERROR")
 
 
 async def chat_with_user(message: str, ctx: dict) -> dict:
@@ -131,11 +188,22 @@ async def chat_with_user(message: str, ctx: dict) -> dict:
         result = json.loads(content)
         result.setdefault("disclaimer", "This is illustrative guidance, not financial advice. ARQAU does not guarantee any specific financial outcome.")
         return result
-    except RateLimitError:
+    except APITimeoutError as e:
+        _safe_log_error("chat", e, timeout=30.0)
+        raise RuntimeError("AI_TIMEOUT")
+    except APIConnectionError as e:
+        _safe_log_error("chat", e)
+        raise RuntimeError("AI_CONNECTION_ERROR")
+    except RateLimitError as e:
+        _safe_log_error("chat", e, status_code=429)
         raise RuntimeError("AI_QUOTA_EXCEEDED")
     except APIStatusError as e:
-        if e.status_code == 429 or "quota" in str(e).lower():
+        _safe_log_error("chat", e, status_code=e.status_code)
+        if e.status_code == 429:
             raise RuntimeError("AI_QUOTA_EXCEEDED")
-        raise RuntimeError(f"OpenAI error: {str(e)}")
+        if e.status_code in (401, 403):
+            raise RuntimeError("AI_AUTH_FAILED")
+        raise RuntimeError(f"AI_HTTP_{e.status_code}")
     except Exception as e:
-        raise RuntimeError(f"OpenAI error: {str(e)}")
+        _safe_log_error("chat", e)
+        raise RuntimeError("AI_UNKNOWN_ERROR")

@@ -71,10 +71,26 @@ async def analyze_withdrawal_endpoint(
         result = await analyze_withdrawal(financial_context)
         return WithdrawalAnalysis(**result)
     except RuntimeError as e:
-        if "AI_QUOTA_EXCEEDED" in str(e):
+        msg = str(e)
+        if msg == "AI_QUOTA_EXCEEDED":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
+            )
+        if msg == "AI_AUTH_FAILED":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service is temporarily misconfigured. Please contact support.",
+            )
+        if msg == "AI_TIMEOUT":
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="AI analysis timed out. Please try again.",
+            )
+        if msg == "AI_CONNECTION_ERROR":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service is temporarily unreachable. Please try again later.",
             )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -132,10 +148,26 @@ async def chat_endpoint(
         result = await chat_with_user(request.message, financial_context)
         return ChatResponse(**result)
     except RuntimeError as e:
-        if "AI_QUOTA_EXCEEDED" in str(e):
+        msg = str(e)
+        if msg == "AI_QUOTA_EXCEEDED":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
+            )
+        if msg == "AI_AUTH_FAILED":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service is temporarily misconfigured. Please contact support.",
+            )
+        if msg == "AI_TIMEOUT":
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="AI assistant timed out. Please try again.",
+            )
+        if msg == "AI_CONNECTION_ERROR":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service is temporarily unreachable. Please try again later.",
             )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
