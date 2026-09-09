@@ -5,18 +5,17 @@ import MiniPhoneFrame from "./MiniPhoneFrame";
 import { EarningsScreen, ExpensesScreen, RecommendationScreen, WhatIfScreen, AIScreen } from "./ShowcaseScreens";
 import { useTranslation } from "@/lib/language-context";
 
-const screens = [
-  { comp: EarningsScreen, label: "Earnings", rotate: -5 },
-  { comp: ExpensesScreen, label: "Expenses", rotate: -2.5 },
-  { comp: RecommendationScreen, label: "Recommendation", rotate: 0 },
-  { comp: WhatIfScreen, label: "What if?", rotate: 2.5 },
-  { comp: AIScreen, label: "AI Assistant", rotate: 5 },
-];
-
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function ProductShowcase() {
   const { t } = useTranslation();
+  const screens = [
+    { comp: EarningsScreen, label: t.landing.earningsTitle || "Earnings", rotate: -5 },
+    { comp: ExpensesScreen, label: t.landing.expensesTitle || "Expenses", rotate: -2.5 },
+    { comp: RecommendationScreen, label: t.landing.recommendationTitle || "Recommendation", rotate: 0 },
+    { comp: WhatIfScreen, label: t.whatIf.title || "What if?", rotate: 2.5 },
+    { comp: AIScreen, label: t.ai.title || "AI Assistant", rotate: 5 },
+  ];
   return (
     <section id="features" className="py-28 lg:py-36 bg-cream-orange overflow-hidden">
       <div className="container-arqau grid lg:grid-cols-[0.75fr_1.25fr] gap-16 items-center">
@@ -48,7 +47,7 @@ export default function ProductShowcase() {
             transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
             className="text-[18px] leading-[1.7] text-ink-soft mb-9 max-w-[460px] reveal-text"
           >
-            From earnings to expenses, from smart recommendations to AI insights — ARQAU gives you the full picture and helps you make the right decision.
+            {t.landing.productShowcaseCopy}
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 16 }}

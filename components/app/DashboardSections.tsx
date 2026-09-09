@@ -235,7 +235,7 @@ export function AIPage() {
       const result = await api.ai.chat(userMsg);
       setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Chat failed";
+      const msg = err instanceof Error ? err.message : t.ai.chatFailed;
       setChatError(msg);
       setChatHistory((h) => h.slice(0, -1));
     } finally {
@@ -254,7 +254,7 @@ export function AIPage() {
       setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
       setMessage("");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Chat failed";
+      const msg = err instanceof Error ? err.message : t.ai.chatFailed;
       setChatError(msg);
     } finally {
       setSending(false);
@@ -295,12 +295,12 @@ export function AIPage() {
             type="number"
             value={withdrawalAmount}
             onChange={(e) => { setWithdrawalAmount(e.target.value); setAnalysis(null); setAnalysisError(""); }}
-            placeholder="Enter amount to analyze (₸)"
-            aria-label="Withdrawal amount"
+            placeholder={t.ai.enterAmountAnalyze}
+            aria-label={t.ai.analyzeButton}
             className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers"
           />
           <button onClick={handleAnalyze} disabled={analyzing} className="btn-primary px-4">
-            {analyzing ? <Loader2 className="animate-spin" size={16} /> : "Analyze"}
+            {analyzing ? <Loader2 className="animate-spin" size={16} /> : t.ai.analyzeButton}
           </button>
         </div>
         {analyzing && (
@@ -374,12 +374,12 @@ export function AIPage() {
         ))}
         {chatDisabled && sending && chatHistory.length > 0 && (
           <div className="max-w-[82%] rounded-[16px] bg-orange-soft px-4 py-3 text-[14px] leading-relaxed">
-            <span className="inline-flex items-center gap-2 text-ink-soft"><Loader2 className="animate-spin" size={14} /> Analyzing your financial context...</span>
+            <span className="inline-flex items-center gap-2 text-ink-soft"><Loader2 className="animate-spin" size={14} /> {t.dashboard.analyzing}</span>
           </div>
         )}
       </div>
       <form className="mt-4 flex gap-2 border-t border-ink/[0.08] pt-4" onSubmit={handleChat}>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your finances..." aria-label="Ask about your finances" className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" disabled={sending || chatDisabled} />
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder={t.ai.askPlaceholder} aria-label={t.ai.askAria} className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" disabled={sending || chatDisabled} />
         <button className="btn-primary px-4" type="submit" disabled={sending || chatDisabled || !message.trim()}>
           {sending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
         </button>
@@ -408,7 +408,7 @@ export function GetMoneyPage() {
       setEarned(earnedData);
       setRequests(requestsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load earned wages. Please try again.");
+      setError(err instanceof Error ? err.message : t.withdraw.unableToLoadEarned);
     } finally {
       setLoading(false);
     }
@@ -438,14 +438,14 @@ export function GetMoneyPage() {
       setSuccess(t.withdraw.success);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to submit request. Please try again.");
+      setError(err instanceof Error ? err.message : t.withdraw.unableToSubmitRequest);
     } finally {
       setSubmitting(false);
     }
   }
 
   if (loading) {
-    return <PageFrame eyebrow="Get money" title="Access what you have already earned." copy="Loading your earned wages...">
+    return <PageFrame eyebrow="Get money" title={t.dashboard.accessEarned} copy={t.dashboard.withdrawCopy}>
       <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-orange" size={24} /></div>
     </PageFrame>;
   }
@@ -455,7 +455,7 @@ export function GetMoneyPage() {
   const requestedAmount = Number(amount || 0);
   const remaining = Math.max(0, available - requestedAmount);
 
-  return <PageFrame eyebrow="Get money" title="Access what you have already earned." copy="ARQAU calculates your available amount from earned income and withdrawals. Request only what you need.">
+  return <PageFrame eyebrow="Get money" title={t.dashboard.accessEarned} copy={t.dashboard.withdrawCopy}>
     {error && <div className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700 flex items-center gap-2"><AlertCircle size={16} />{error}</div>}
     {success && <div className="mb-4 rounded-[10px] border border-orange/20 bg-orange-soft px-4 py-3 text-[13px] text-orange flex items-center gap-2"><Check size={16} />{success}</div>}
 
@@ -494,10 +494,10 @@ export function GetMoneyPage() {
             </div>
           </div>
           <div className="space-y-3">
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={`Amount up to ${formatTenge(available)} ₸`} aria-label="Amount to request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" aria-label="Reason for request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={t.withdraw.amountUpTo.replace("{amount}", formatTenge(available))} aria-label={t.withdraw.amountToRequestAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t.withdraw.reasonOptional} aria-label={t.withdraw.reasonAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
             <button onClick={handleRequest} disabled={submitting || !amount || Number(amount) <= 0 || Number(amount) > available} className="btn-primary w-full justify-center disabled:opacity-50">
-              {submitting ? "Submitting..." : t.withdraw.submit}
+              {submitting ? t.dashboard.submitting : t.withdraw.submit}
             </button>
           </div>
         </div>
@@ -522,7 +522,7 @@ export function GetMoneyPage() {
                 <p className="text-[12px] text-ink-soft">{new Date(req.created_at).toLocaleDateString()}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${
-                req.status === "approved" ? "bg-green/20 text-orange" :
+                req.status === "approved" ? "bg-orange/20 text-orange" :
                 req.status === "pending" ? "bg-yellow-100 text-yellow-700" :
                 req.status === "rejected" ? "bg-red-100 text-red-600" :
                 "bg-ink/10 text-ink-soft"

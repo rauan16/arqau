@@ -63,7 +63,7 @@ function EarningsCard({ earned }: { earned: EarnedWages | null }) {
         </div>
       </div>
       <div className="mt-5 border-t border-ink/[0.06] pt-4">
-        <p className="text-[12px] text-ink-soft">Available = Earned − Accessed. Backend calculates the authoritative amount.</p>
+        <p className="text-[12px] text-ink-soft">{t.earnings.authoritativeNote}</p>
       </div>
     </section>
   );

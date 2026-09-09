@@ -8,6 +8,7 @@ import { onboardingStorageKey, type OnboardingProfile } from "@/lib/onboarding";
 import { api } from "@/lib/api";
 import { useTranslation } from "@/lib/language-context";
 import { useRouter } from "next/navigation";
+import type { TranslationKeys } from "@/lib/i18n";
 
 const questions = [
   { key: "payFrequency", type: "choice", titleKey: "payFrequencyTitle", textKey: "payFrequencyText", options: ["Monthly", "Twice a month", "Weekly", "It varies"] },
@@ -20,6 +21,50 @@ const questions = [
 
 type AnswerKey = keyof OnboardingProfile;
 type Answers = Partial<OnboardingProfile>;
+
+const optionTranslationKeys: Record<string, string> = {
+  Monthly: "payFrequencyMonthly",
+  "Twice a month": "payFrequencyTwice",
+  Weekly: "payFrequencyWeekly",
+  "It varies": "payFrequencyVaries",
+  "Under 150,000 ₸": "monthlyIncomeUnder150",
+  "150,000-300,000 ₸": "monthlyIncome150to300",
+  "300,000-500,000 ₸": "monthlyIncome300to500",
+  "500,000-750,000 ₸": "monthlyIncome500to750",
+  "750,000 ₸+": "monthlyIncome750Plus",
+  "1st-5th": "payday1to5",
+  "6th-15th": "payday6to15",
+  "16th-25th": "payday16to25",
+  "26th-31st": "payday26to31",
+  "Unexpected expenses": "financialPressureUnexpected",
+  "Regular bills": "financialPressureBills",
+  "Food & everyday spending": "financialPressureFood",
+  Transport: "financialPressureTransport",
+  "Large planned purchases": "financialPressureLargePurchases",
+  "Nothing in particular": "financialPressureNothing",
+  Other: "financialPressureOther",
+  "An unexpected expense": "earlyAccessUnexpected",
+  "Bills before payday": "earlyAccessBills",
+  "Everyday spending": "earlyAccessEveryday",
+  "A planned purchase": "earlyAccessPlanned",
+  "Building a financial buffer": "earlyAccessBuffer",
+  "Warn me before I may run short": "aiHelpWarn",
+  "Help me understand my spending": "aiHelpUnderstand",
+  "Help me decide when accessing earned wages may make sense": "aiHelpDecide",
+  "Help me build a financial buffer": "aiHelpBuffer",
+  "Give me a simple overview": "aiHelpOverview",
+};
+
+function translateOption(t: TranslationKeys, option: string): string {
+  const key = optionTranslationKeys[option];
+  if (!key) return option;
+  const parts = key.split(".");
+  let current: any = t;
+  for (const part of parts) {
+    current = current?.[part];
+  }
+  return typeof current === "string" ? current : option;
+}
 
 export default function SmartOnboarding() {
   const { t } = useTranslation();
@@ -83,7 +128,7 @@ export default function SmartOnboarding() {
       localStorage.setItem(onboardingStorageKey, JSON.stringify(answers));
       setComplete(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save preferences. Please try again.");
+      setError(err instanceof Error ? err.message : t.onboarding.failedToSavePreferences);
     } finally {
       setSaving(false);
     }
@@ -94,9 +139,9 @@ export default function SmartOnboarding() {
   }
 
   const sectionLabel = step < 2 ? t.onboarding.sectionAbout : t.onboarding.sectionFinancial;
-  const title = t[question.titleKey as keyof typeof t] as string;
-  const text = t[question.textKey as keyof typeof t] as string;
-  const multiText = question.multiTextKey ? t[question.multiTextKey as keyof typeof t] as string : null;
+  const title = t.onboarding[question.titleKey as keyof typeof t.onboarding] as string;
+  const text = t.onboarding[question.textKey as keyof typeof t.onboarding] as string;
+  const multiText = question.multiTextKey ? t.onboarding[question.multiTextKey as keyof typeof t.onboarding] as string : null;
 
   return <main className="min-h-screen bg-cream px-5 py-8 sm:px-8 sm:py-10">
     <div className="mx-auto max-w-[1040px]">
@@ -109,9 +154,9 @@ export default function SmartOnboarding() {
           <AnimatePresence mode="wait"><motion.div key={step} initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.28 }}>
             <p className="eyebrow mb-5">{t.onboarding.step.replace("{step}", String(step + 1).padStart(2, "0"))}</p><h2 className="text-[34px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[46px]">{title}</h2><p className="mt-5 max-w-[560px] text-[16px] leading-relaxed text-ink-soft">{text}</p>
             {multiText && <p className="mt-2 text-[13px] font-semibold text-orange">{multiText}</p>}
-            {question.type === "text" ? <label className="mt-9 block text-[13px] font-semibold">{t.onboarding.nameLabel}<input autoFocus value={String(currentValue)} onChange={(event) => updateAnswer(event.target.value)} placeholder={t.onboarding.namePlaceholder} className="mt-2 w-full rounded-[12px] border border-ink/[0.12] bg-cream px-4 py-4 text-[16px] outline-none transition-colors focus:border-orange" /></label> : question.type === "multi" ? <div className="mt-9 grid gap-3">{question.options?.map((option) => <button key={option} type="button" onClick={() => toggleOption(option)} className={`flex w-full items-center justify-between rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${isSelected(option) ? "border-orange bg-orange-soft text-ink shadow-[0_10px_24px_-20px_rgba(198,93,46,0.5)]" : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"}`}>{option}{isSelected(option) && <Check size={17} className="text-orange" />}</button>)}</div> : <div className="mt-9 grid gap-3">{question.options?.map((option) => <button key={option} type="button" onClick={() => updateAnswer(option)} className={`flex w-full items-center justify-between rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${currentValue === option ? "border-orange bg-orange-soft text-ink shadow-[0_10px_24px_-20px_rgba(198,93,46,0.5)]" : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"}`}>{option}{currentValue === option && <Check size={17} className="text-orange" />}</button>)}</div>}
+             {question.type === "text" ? <label className="mt-9 block text-[13px] font-semibold">{t.onboarding.nameLabel}<input autoFocus value={String(currentValue)} onChange={(event) => updateAnswer(event.target.value)} placeholder={t.onboarding.namePlaceholder} className="mt-2 w-full rounded-[12px] border border-ink/[0.12] bg-cream px-4 py-4 text-[16px] outline-none transition-colors focus:border-orange" /></label> : question.type === "multi" ? <div className="mt-9 grid gap-3">{question.options?.map((option) => <button key={option} type="button" onClick={() => toggleOption(option)} className={`flex w-full items-center justify-between rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${isSelected(option) ? "border-orange bg-orange-soft text-ink shadow-[0_10px_24px_-20px_rgba(198,93,46,0.5)]" : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"}`}>{translateOption(t, option)}{isSelected(option) && <Check size={17} className="text-orange" />}</button>)}</div> : <div className="mt-9 grid gap-3">{question.options?.map((option) => <button key={option} type="button" onClick={() => updateAnswer(option)} className={`flex w-full items-center justify-between rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${currentValue === option ? "border-orange bg-orange-soft text-ink shadow-[0_10px_24px_-20px_rgba(198,93,46,0.5)]" : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"}`}>{translateOption(t, option)}{currentValue === option && <Check size={17} className="text-orange" />}</button>)}</div>}
             {question.key === "financialPressure" && isSelected("Other") && (
-              <label className="mt-3 block text-[13px] font-semibold">Please describe
+              <label className="mt-3 block text-[13px] font-semibold">{t.onboarding.otherLabel}
                 <input
                   autoFocus
                   value={otherText}
@@ -121,7 +166,7 @@ export default function SmartOnboarding() {
                     const newValue = event.target.value.trim() ? [...selected, `Other: ${event.target.value}`].join(", ") : selected.join(", ");
                     updateAnswer(newValue);
                   }}
-                  placeholder="Tell us more..."
+                  placeholder={t.onboarding.otherPlaceholder}
                   className="mt-2 w-full rounded-[12px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange"
                 />
               </label>
