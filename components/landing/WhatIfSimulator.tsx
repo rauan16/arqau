@@ -5,9 +5,9 @@ import { motion } from "framer-motion";
 import { scenario, evaluateWithdrawal, formatTenge } from "@/lib/demoData";
 
 const statusStyles: Record<string, { bg: string; text: string; bar: string }> = {
-  comfortable: { bg: "bg-green/10", text: "text-green", bar: "bg-green" },
-  caution: { bg: "bg-orange/10", text: "text-orange-dark", bar: "bg-orange" },
-  "high-risk": { bg: "bg-orange-dark/10", text: "text-orange-dark", bar: "bg-orange-dark" },
+  comfortable: { bg: "bg-green-soft", text: "text-green-deep", bar: "bg-green-bright" },
+  caution: { bg: "bg-green-soft/60", text: "text-green-deep", bar: "bg-green" },
+  "high-risk": { bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500" },
 };
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -82,9 +82,9 @@ export default function WhatIfSimulator() {
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
               aria-label="Withdrawal amount"
-              className="w-full h-3 rounded-full appearance-none bg-ink/[0.08] accent-orange focus-ring mb-3"
+              className="w-full h-3 rounded-full appearance-none bg-ink/[0.08] accent-green-deep focus-ring mb-3"
               style={{
-                background: `linear-gradient(to right, var(--orange) ${pct}%, rgba(21,21,21,0.08) ${pct}%)`,
+                background: `linear-gradient(to right, var(--green-deep) ${pct}%, rgba(21,21,21,0.08) ${pct}%)`,
               }}
             />
             <div className="flex justify-between text-[12px] text-ink-soft/60 mb-10">
@@ -101,7 +101,7 @@ export default function WhatIfSimulator() {
               transition={{ duration: 0.22 }}
             >
               <p className="text-[12px] text-ink-soft mb-1.5">Remaining balance</p>
-              <p className="text-[23px] font-bold tracking-tight">{formatTenge(result.remainingAvailable)}</p>
+              <p className="text-[23px] font-bold tracking-tight numbers">{formatTenge(result.remainingAvailable)}</p>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -110,7 +110,7 @@ export default function WhatIfSimulator() {
               transition={{ duration: 0.45, delay: 0.12, ease: easeOut }}
             >
               <p className="text-[12px] text-ink-soft mb-1.5">Upcoming expenses</p>
-              <p className="text-[23px] font-bold tracking-tight">{formatTenge(scenario.upcomingExpensesTotal)}</p>
+              <p className="text-[23px] font-bold tracking-tight numbers">{formatTenge(scenario.upcomingExpensesTotal)}</p>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 12 }}

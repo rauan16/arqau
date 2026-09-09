@@ -1,8 +1,8 @@
 const columns = [
-  { title: "Product", links: [{ label: "Product", href: "#product" }, { label: "How it works", href: "#how-it-works" }, { label: "Features", href: "#features" }] },
-  { title: "For", links: [{ label: "Employees", href: "#top" }, { label: "Employers", href: "#employers" }] },
-  { title: "Company", links: [{ label: "About ARQAU", href: "#product" }, { label: "Login", href: "/login" }] },
-  { title: "Explore", links: [{ label: "Simulator", href: "#simulator" }, { label: "AI assistant", href: "#ai-assistant" }] },
+  { title: "Product", links: [{ label: "How it works", href: "#how-it-works" }, { label: "Features", href: "#features" }, { label: "Simulator", href: "#simulator" }] },
+  { title: "For", links: [{ label: "Employees", href: "#top" }, { label: "Employers", href: "#employers" }, { label: "AI assistant", href: "#ai-assistant" }] },
+  { title: "Company", links: [{ label: "Request a demo", href: "/signup" }, { label: "Sign in", href: "/login" }] },
+  { title: "Explore", links: [{ label: "Dashboard", href: "/dashboard" }, { label: "Register business", href: "/business/register" }] },
 ];
 
 export default function Footer() {
@@ -37,7 +37,7 @@ export default function Footer() {
               <ul className="space-y-3">
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <a href={l.href} className="text-[14px] text-ink hover:text-orange-dark transition-colors focus-ring">
+                    <a href={l.href} className="text-[14px] text-ink hover:text-green-deep transition-colors focus-ring">
                       {l.label}
                     </a>
                   </li>

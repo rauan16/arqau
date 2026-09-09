@@ -17,7 +17,7 @@ export default function BrandStatement() {
           className="text-[38px] sm:text-[52px] lg:text-[68px] leading-[1.04] font-medium tracking-[-0.03em] max-w-[940px] text-balance"
         >
           Getting paid earlier is only half the story.{" "}
-          <span className="font-serif italic text-orange">Knowing what to do with it is the other half.</span>
+          <span className="font-serif italic text-green-deep">Knowing what to do with it is the other half.</span>
         </motion.h2>
         <motion.p
           initial={{ opacity: 0, y: 12 }}

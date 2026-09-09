@@ -35,38 +35,38 @@ export default function Hero() {
   return (
     <section id="top" className="relative min-h-[700px] lg:min-h-[800px] overflow-hidden pt-[120px] pb-20 lg:pt-[140px] lg:pb-28">
       {/* organic orange field */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1.2, ease: "easeOut" }}
-        className="pointer-events-none absolute inset-0 -z-10"
-      >
-        <svg
-          className="hidden lg:block absolute -right-[8%] -top-[12%] w-[78%] h-[150%]"
-          viewBox="0 0 900 1000"
-          fill="none"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <path
-            d="M900 0H320C420 90 300 190 210 260C90 350 20 470 60 620C100 770 260 830 400 900C520 960 700 1000 900 960V0Z"
-            fill="url(#heroGradient)"
-          />
-          <defs>
-            <linearGradient id="heroGradient" x1="900" y1="0" x2="200" y2="960" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#FF9B68" />
-              <stop offset="1" stopColor="#FF7745" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <div className="lg:hidden absolute left-[-25%] right-[-25%] top-[48%] bottom-[-10%] rounded-t-[48%] bg-orange-2" />
-      </motion.div>
+<motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 1.2, ease: "easeOut" }}
+              className="pointer-events-none absolute inset-0 -z-10"
+            >
+              <svg
+                className="hidden lg:block absolute -right-[8%] -top-[12%] w-[78%] h-[150%]"
+                viewBox="0 0 900 1000"
+                fill="none"
+                preserveAspectRatio="xMidYMid slice"
+              >
+                <path
+                  d="M900 0H320C420 90 300 190 210 260C90 350 20 470 60 620C100 770 260 830 400 900C520 960 700 1000 900 960V0Z"
+                  fill="url(#heroGradient)"
+                />
+                <defs>
+                  <linearGradient id="heroGradient" x1="900" y1="0" x2="200" y2="960" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#5E9A68" />
+                    <stop offset="1" stopColor="#4F7A52" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="lg:hidden absolute left-[-25%] right-[-25%] top-[48%] bottom-[-10%] rounded-t-[48%] bg-green-2" />
+            </motion.div>
 
       <div className="relative z-10 max-w-[1480px] mx-auto pl-6 pr-6 lg:pl-[72px] lg:pr-[72px]">
         <div className="grid lg:grid-cols-[minmax(440px,1fr)_minmax(480px,1.1fr)] xl:grid-cols-[1fr_1.1fr] gap-10 lg:gap-12 xl:gap-16 items-start">
           {/* left: copy */}
           <div className="relative z-10 max-w-[520px]">
             <motion.p variants={fadeUp} initial="hidden" animate="show" custom={0} className="eyebrow mb-6">
-              Smarter access to earned wages
+              Earned wage access
             </motion.p>
 
             <motion.h1
@@ -80,7 +80,7 @@ export default function Hero() {
               <br />
               When you&apos;ve
               <br />
-              <span className="font-serif italic font-medium text-orange">earned it.</span>
+              <span className="font-serif italic font-medium text-green-deep">earned it.</span>
             </motion.h1>
 
             <motion.p
@@ -90,7 +90,7 @@ export default function Hero() {
               custom={0.22}
               className="mt-8 text-[16px] sm:text-[17px] leading-[1.7] text-ink-soft max-w-[400px]"
             >
-              ARQAU helps you access what you&apos;ve already earned, understand your options and make a more confident decision before payday.
+              Access money you have already earned, and understand how much to actually take — not just how much you can.
             </motion.p>
 
             <motion.div
@@ -101,7 +101,7 @@ export default function Hero() {
               className="mt-10 flex flex-wrap items-center gap-4"
             >
               <a href="/signup" className="btn-primary">
-                Get started <ArrowRight size={16} className="btn-arrow" />
+                Request a demo <ArrowRight size={16} className="btn-arrow" />
               </a>
               <a href="#how-it-works" className="btn-secondary">
                 See how it works
@@ -143,17 +143,17 @@ export default function Hero() {
               <FloatingInsightCard>
                 <p className="text-[11px] text-ink-soft mb-0.5">Your earnings</p>
                 <p className="text-[10px] text-ink-soft/70 mb-2">This month</p>
-                <p className="text-[19px] font-bold mb-2.5">{formatTenge(scenario.earned)}</p>
+                <p className="text-[19px] font-bold mb-2.5 numbers">{formatTenge(scenario.earned)}</p>
                 <div className="flex items-end gap-[3px] h-7">
                   {weeklyEarnings.map((v, i) => (
-                    <div key={i} className="w-[7px] rounded-full bg-orange" style={{ height: `${(v / maxEarn) * 100}%` }} />
+                    <div key={i} className="w-[7px] rounded-full bg-green-bright" style={{ height: `${(v / maxEarn) * 100}%` }} />
                   ))}
                 </div>
                 <p className="mt-1.5 text-[9px] text-ink-soft/50">Illustrative example</p>
               </FloatingInsightCard>
             </motion.div>
 
-            <motion.div
+<motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: [0, -9, 0] }}
               transition={{ opacity: { duration: 0.6, delay: 0.7 }, ...floatY(5.8, 1.5).transition }}
@@ -169,14 +169,14 @@ export default function Hero() {
                         <span className="flex items-center gap-1.5 text-ink-soft">
                           <Icon size={12} /> {e.label}
                         </span>
-                        <span className="font-semibold">{formatTenge(e.amount)}</span>
+                        <span className="font-semibold numbers">{formatTenge(e.amount)}</span>
                       </div>
                     );
                   })}
                 </div>
                 <div className="pt-2 border-t border-ink/[0.07] flex items-center justify-between text-[12px]">
                   <span className="text-ink-soft">Total</span>
-                  <span className="font-bold">{formatTenge(scenario.upcomingExpensesTotal)}</span>
+                  <span className="font-bold numbers">{formatTenge(scenario.upcomingExpensesTotal)}</span>
                 </div>
                 <p className="mt-1.5 text-[9px] text-ink-soft/50">Illustrative example</p>
               </FloatingInsightCard>
@@ -188,10 +188,10 @@ export default function Hero() {
               transition={{ opacity: { duration: 0.6, delay: 0.85 }, ...floatY(5.2, 1.7).transition }}
                 className="hidden lg:block absolute z-20 right-0 top-[68%] w-[230px] xl:top-[16%] xl:-right-[56px] xl:w-[180px]"
             >
-              <FloatingInsightCard className="bg-cream-orange border-orange/20">
+              <FloatingInsightCard className="bg-green-soft border-green/20">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Lightbulb size={13} className="text-orange-dark" />
-                  <p className="text-[11px] font-semibold text-orange-dark">AI recommendation</p>
+                  <Lightbulb size={13} className="text-green-deep" />
+                  <p className="text-[11px] font-semibold text-green-deep">ARQAU recommendation</p>
                 </div>
                 <p className="text-[12px] leading-snug text-ink-soft mb-2">
                   ARQAU considers your earned income, upcoming expenses and reserve target before suggesting an amount.
@@ -214,15 +214,15 @@ export default function Hero() {
                 <p className="text-[11.5px] text-ink-soft leading-snug mb-2.5">
                   Try different scenarios and see how they affect your balance.
                 </p>
-                <span className="text-[12px] font-semibold text-orange-dark">Open simulator →</span>
+                <span className="text-[12px] font-semibold text-green-deep">Open simulator →</span>
               </FloatingInsightCard>
             </motion.div>
 
-<motion.div
+            <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: [0, -6, 0] }}
               transition={{ opacity: { duration: 0.6, delay: 1.1 }, ...floatY(4.8, 2.1).transition }}
-              className="hidden lg:block absolute z-20 left-1/2 -translate-x-1/2 bottom-0 w-[200px]"
+                className="hidden lg:block absolute z-20 left-1/2 -translate-x-1/2 bottom-0 w-[200px]"
             >
               <FloatingInsightCard>
                 <div className="flex items-center gap-1.5 mb-1.5">
@@ -230,7 +230,7 @@ export default function Hero() {
                   <p className="text-[11px] font-semibold">Reserve target</p>
                 </div>
                 <p className="text-[10.5px] text-ink-soft mb-1">Amount ARQAU recommends keeping</p>
-                <p className="text-[18px] font-bold">{formatTenge(scenario.reserveTarget)}</p>
+                <p className="text-[18px] font-bold numbers">{formatTenge(scenario.reserveTarget)}</p>
               </FloatingInsightCard>
             </motion.div>
           </div>

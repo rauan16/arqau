@@ -28,7 +28,7 @@ export default function RecommendationSection() {
             transition={{ duration: 0.6, ease: easeOut }}
             className="text-[38px] sm:text-[50px] lg:text-[60px] font-extrabold leading-[1.02] tracking-[-0.025em] reveal-text text-balance"
           >
-            Not just a number. <span className="font-serif italic font-medium text-orange">A recommendation.</span>
+            Not just a number. <span className="font-serif italic font-medium text-green-deep">A recommendation.</span>
           </motion.h2>
         </div>
 
@@ -55,7 +55,7 @@ export default function RecommendationSection() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, margin: "-60px" }}
             transition={{ duration: 0.6, delay: 0.3, ease: easeOut }}
-            className="rounded-[26px] bg-orange text-cream p-9 sm:p-10 shadow-[0_28px_55px_-30px_rgba(201,71,24,0.55)]"
+            className="rounded-[26px] bg-green-deep text-cream p-9 sm:p-10 shadow-[0_28px_55px_-30px_rgba(47,83,56,0.55)]"
           >
             <p className="text-[14px] font-semibold opacity-85 mb-3 reveal-text">Recommended withdrawal</p>
             <p className="text-[52px] sm:text-[60px] font-extrabold tracking-[-0.03em] mb-5 reveal-text">{formatTenge(scenario.recommended)}</p>
@@ -64,7 +64,7 @@ export default function RecommendationSection() {
             </p>
             <div className="flex justify-between text-[14px] pt-4 border-t border-cream/25 reveal-text">
               <span className="opacity-80">Available</span>
-              <span className="font-semibold">{formatTenge(scenario.available)}</span>
+              <span className="font-semibold numbers">{formatTenge(scenario.available)}</span>
             </div>
             <div className="flex justify-between text-[14px] mt-2 reveal-text">
               <span className="opacity-80">Reserve target</span>

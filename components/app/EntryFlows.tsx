@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 
-const inputClass = "mt-2 w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange";
+const inputClass = "mt-2 w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep focus-ring";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const isLogin = mode === "login";
@@ -41,7 +41,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           <div className="hidden bg-ink p-12 text-cream lg:block">
             <Link href="/" className="text-[20px] font-extrabold tracking-[0.08em]">ARQAU</Link>
             <div className="mt-32 max-w-[360px]">
-              <p className="eyebrow text-orange-2">A clearer financial decision</p>
+              <p className="eyebrow text-green-2">A clearer financial decision</p>
               <h1 className="mt-5 text-[52px] font-extrabold leading-[0.98] tracking-[-0.04em]">Earned income, in context.</h1>
               <p className="mt-6 text-[16px] leading-relaxed text-cream/65">Your salary, expenses and reserve in one calm workspace.</p>
             </div>
@@ -102,12 +102,12 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
               </form>
               <p className="mt-7 text-center text-[13px] text-ink-soft">
                 {isLogin ? "New to ARQAU?" : "Already have an account?"}{" "}
-                <Link className="font-bold text-orange-dark" href={isLogin ? "/signup" : "/login"}>
+                <Link className="font-bold text-green-deep" href={isLogin ? "/signup" : "/login"}>
                   {isLogin ? "Create one" : "Sign in"}
                 </Link>
               </p>
               <div className="mt-10 border-t border-ink/[0.08] pt-5 text-center">
-                <Link href="/business/register" className="text-[13px] font-semibold text-ink-soft hover:text-orange-dark">
+                <Link href="/business/register" className="text-[13px] font-semibold text-ink-soft hover:text-green-deep">
                   Register a business instead →
                 </Link>
               </div>
@@ -151,7 +151,7 @@ export function OnboardingPage() {
           <span className="text-[13px] text-ink-soft">Step {step} of 2</span>
         </div>
         <div className="mt-12 h-1 rounded-full bg-ink/[0.08]">
-          <div className="h-1 rounded-full bg-orange transition-all" style={{ width: `${(step / 2) * 100}%` }} />
+          <div className="h-1 rounded-full bg-green-deep transition-all" style={{ width: `${(step / 2) * 100}%` }} />
         </div>
         <div className="mt-16 rounded-[26px] border border-ink/[0.08] bg-white/70 p-7 sm:p-12">
           <p className="eyebrow mb-4">Personalize ARQAU</p>
@@ -184,8 +184,8 @@ export function OnboardingPage() {
                   onClick={() => setPriority(item)}
                   className={`rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${
                     priority === item
-                      ? "border-orange bg-cream-orange text-ink shadow-[0_10px_24px_-20px_rgba(201,71,24,0.8)]"
-                      : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"
+                      ? "border-green-deep bg-green-soft text-ink shadow-[0_10px_24px_-20px_rgba(47,83,56,0.5)]"
+                      : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-green/50 hover:text-ink"
                   }`}
                 >
                   {item}
@@ -266,7 +266,7 @@ export function BusinessRegistration() {
                       step > index + 1
                         ? "border-green bg-green text-cream"
                         : step === index + 1
-                        ? "border-orange bg-orange text-cream"
+                        ? "border-green-deep bg-green-deep text-cream"
                         : "border-ink/15"
                     }`}
                   >

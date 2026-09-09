@@ -8,7 +8,7 @@ const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function FinalCTA() {
   return (
-    <section id="final-cta" className="relative overflow-hidden bg-orange-dark text-cream py-32 lg:py-44">
+    <section id="final-cta" className="relative overflow-hidden bg-green-deep text-cream py-32 lg:py-44">
       <div className="pointer-events-none absolute inset-0">
         <Image
           src="/Kazakhstan1-e1496914203779.jpg"
@@ -18,7 +18,7 @@ export default function FinalCTA() {
           sizes="100vw"
           className="absolute inset-0 h-full w-full object-cover object-center opacity-40"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(201,71,24,0.98)_0%,rgba(201,71,24,0.85)_42%,rgba(201,71,24,0.5)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(47,83,56,0.98)_0%,rgba(47,83,56,0.85)_42%,rgba(47,83,56,0.5)_100%)]" />
       </div>
 
       <div className="container-arqau relative z-10 grid lg:grid-cols-[1.2fr_0.8fr] gap-10 items-end">

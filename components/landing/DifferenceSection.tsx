@@ -4,11 +4,11 @@ import { motion } from "framer-motion";
 import { CircleDollarSign, Sparkles, HandCoins, Shuffle, MessageCircle, ShieldCheck } from "lucide-react";
 
 const features = [
-  [CircleDollarSign, "Earned wages", "See what you’ve earned so far, in real time."],
-  [Sparkles, "Smart recommendations", "Get personalized advice on how much to withdraw."],
+  [CircleDollarSign, "Earned wages", "See what you have already earned, in real time."],
+  [Sparkles, "Smart recommendations", "Get a clear, context-aware amount — not just a limit."],
   [HandCoins, "Expense planning", "Keep track of your bills and upcoming payments."],
   [Shuffle, "What-if simulator", "Try different scenarios and plan with confidence."],
-  [MessageCircle, "AI financial assistant", "Get clear explanations in simple language."],
+  [MessageCircle, "AI financial assistant", "Get clear explanations in plain language."],
   [ShieldCheck, "Build your reserve", "Create a safety net for the future."],
 ];
 
@@ -16,7 +16,7 @@ const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function DifferenceSection() {
   return (
-    <section id="product" className="py-28 lg:py-36 bg-cream">
+    <section id="difference" className="py-28 lg:py-36 bg-cream">
       <div className="container-arqau grid lg:grid-cols-[0.85fr_1.5fr] gap-16 lg:gap-24 items-start">
         <div className="lg:sticky lg:top-32">
           <motion.p
@@ -40,7 +40,7 @@ export default function DifferenceSection() {
             <br />
             just access.
             <br />
-            <span className="font-serif italic font-medium text-orange">It&apos;s a smarter way to manage your money.</span>
+            <span className="font-serif italic font-medium text-green-deep">It&apos;s a smarter way to manage your money.</span>
           </motion.h2>
 
           <motion.p
@@ -64,7 +64,7 @@ export default function DifferenceSection() {
               transition={{ duration: 0.5, delay: index * 0.07, ease: easeOut }}
               className="card p-6 min-h-[170px] flex flex-col"
             >
-              <div className="w-11 h-11 rounded-full border border-orange/25 bg-cream-orange flex items-center justify-center text-orange mb-4">
+              <div className="w-11 h-11 rounded-full border border-green/25 bg-green-soft flex items-center justify-center text-green-deep mb-4">
                 <Icon size={18} strokeWidth={1.7} />
               </div>
               <h3 className="text-[15px] font-semibold mb-1.5 reveal-text">{title as string}</h3>
