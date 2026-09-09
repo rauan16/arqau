@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import { useTranslation } from "@/lib/language-context";
 
 const messages = [
   { from: "user", text: "What happens if I withdraw 80,000 ₸?" },
@@ -13,6 +14,7 @@ const messages = [
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function AIAssistant() {
+  const { t } = useTranslation();
   return (
     <section id="ai-assistant" className="py-32 lg:py-40 bg-near-black text-cream">
       <div className="container-arqau grid lg:grid-cols-[0.8fr_1.2fr] gap-16 lg:gap-24 items-center">
@@ -25,7 +27,7 @@ export default function AIAssistant() {
             className="flex items-center gap-2 mb-5"
           >
             <Sparkles size={16} className="text-green-bright" />
-            <p className="text-[14px] font-semibold tracking-wide text-green-bright reveal-text">ARQAU assistant</p>
+            <p className="text-[14px] font-semibold tracking-wide text-green-bright reveal-text">{t.landing.aiEyebrow}</p>
           </motion.div>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -43,7 +45,7 @@ export default function AIAssistant() {
             transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
             className="text-[18px] leading-[1.7] text-cream/65 mb-7 max-w-[450px] reveal-text"
           >
-            ARQAU explains your numbers in plain language and helps you explore different scenarios before you make a decision.
+            {t.landing.aiSubtitle}
           </motion.p>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -52,7 +54,7 @@ export default function AIAssistant() {
             transition={{ duration: 0.6, delay: 0.2, ease: easeOut }}
             className="text-[12.5px] text-cream/40 leading-relaxed max-w-[380px]"
           >
-            ARQAU recommendations are based on the financial information available in the product and are designed to support decisions, not replace your judgment.
+            {t.landing.aiDisclaimer}
           </motion.p>
         </div>
 
@@ -80,7 +82,7 @@ export default function AIAssistant() {
                 transition={{ duration: 0.4, delay: i * 0.15, ease: easeOut }}
                 className={`max-w-[84%] rounded-2xl px-5 py-4 text-[15px] leading-[1.6] ${
                   m.from === "user"
-                    ? "ml-auto bg-green-deep text-cream rounded-tr-sm"
+                    ? "ml-auto bg-orange text-cream rounded-tr-sm"
                     : "mr-auto bg-white/[0.06] text-cream/90 rounded-tl-sm"
                 }`}
               >
@@ -89,7 +91,7 @@ export default function AIAssistant() {
             ))}
           </div>
           <p className="mt-5 text-[11px] text-cream/35">
-            Illustrative example — try the live AI assistant in your dashboard after signing in.
+            {t.landing.aiIllustrative}
           </p>
         </motion.div>
       </div>

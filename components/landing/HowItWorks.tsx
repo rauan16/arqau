@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Briefcase, Wallet, Receipt, ScanSearch, BadgeCheck } from "lucide-react";
+import { useTranslation } from "@/lib/language-context";
 
 const stages = [
   { icon: Briefcase, title: "Your work", text: "Every shift and workday builds toward your salary." },
@@ -14,6 +15,7 @@ const stages = [
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function HowItWorks() {
+  const { t } = useTranslation();
   return (
     <section id="how-it-works" className="py-28 lg:py-36 bg-cream">
       <div className="container-arqau">
@@ -25,7 +27,7 @@ export default function HowItWorks() {
             transition={{ duration: 0.5, ease: easeOut }}
             className="eyebrow mb-5 reveal-text"
           >
-            How ARQAU works
+            {t.landing.howItWorksTitle}
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -34,7 +36,7 @@ export default function HowItWorks() {
             transition={{ duration: 0.6, ease: easeOut }}
             className="text-[38px] sm:text-[48px] lg:text-[54px] font-extrabold leading-[1.04] tracking-[-0.02em] reveal-text text-balance"
           >
-            From earned income to a smarter decision.
+            {t.landing.howItWorksSubtitle}
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -55,7 +57,7 @@ export default function HowItWorks() {
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 1.1, ease: easeOut }}
             style={{ transformOrigin: "left" }}
-            className="hidden lg:block absolute top-[26px] left-0 right-0 h-px bg-green-deep"
+            className="hidden lg:block absolute top-[26px] left-0 right-0 h-px bg-orange"
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-6">
@@ -69,9 +71,9 @@ export default function HowItWorks() {
                 className="relative"
               >
                 <div className="relative z-10 w-[58px] h-[58px] rounded-full bg-cream border border-ink/[0.1] flex items-center justify-center mb-5">
-                  <s.icon size={20} className="text-green-deep" strokeWidth={1.75} />
+                  <s.icon size={20} className="text-orange" strokeWidth={1.75} />
                 </div>
-                <p className="text-[11px] font-bold tracking-[0.12em] text-green-deep mb-3">0{i + 1}</p>
+                <p className="text-[11px] font-bold tracking-[0.12em] text-orange mb-3">0{i + 1}</p>
                 <h3 className="text-[18px] font-bold mb-2 reveal-text">{s.title}</h3>
                 <p className="text-[15px] leading-[1.7] text-ink-soft max-w-[240px] reveal-text">{s.text}</p>
               </motion.div>

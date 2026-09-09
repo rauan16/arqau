@@ -4,12 +4,14 @@ import Link from "next/link";
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Building2, Mail } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useTranslation } from "@/lib/language-context";
 import { useRouter } from "next/navigation";
 
-const inputClass = "mt-2 w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep focus-ring";
+const inputClass = "mt-2 w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep focus-ring";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const isLogin = mode === "login";
+  const { t } = useTranslation();
   const { login, register } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         : await register(email, password, name || undefined);
       router.push(redirectTo);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
+      setError(err instanceof Error ? err.message : t.auth.errorRequired);
     } finally {
       setLoading(false);
     }
@@ -49,8 +51,8 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           <div className="p-7 sm:p-12">
             <Link href="/" className="text-[19px] font-extrabold tracking-[0.08em] lg:hidden">ARQAU</Link>
             <div className="mx-auto max-w-[420px] lg:mt-10">
-              <p className="eyebrow mb-4">{isLogin ? "Welcome back" : "Create your workspace"}</p>
-              <h2 className="text-[38px] font-extrabold leading-none tracking-[-0.04em]">{isLogin ? "Sign in to ARQAU." : "Start with what you have earned."}</h2>
+              <p className="eyebrow mb-4">{isLogin ? t.auth.loginTitle : t.auth.signupTitle}</p>
+              <h2 className="text-[38px] font-extrabold leading-none tracking-[-0.04em]">{isLogin ? t.auth.loginSubtitle : t.auth.signupSubtitle}</h2>
               <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">{isLogin ? "Continue to your personal finance workspace." : "Create an account to access your earned wages securely."}</p>
               {error && (
                 <div className="mt-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
@@ -59,7 +61,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
               )}
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <label className="block text-[13px] font-semibold">
-                  Email
+                  {t.auth.email}
                   <input
                     required
                     type="email"
@@ -71,7 +73,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                   />
                 </label>
                 <label className="block text-[13px] font-semibold">
-                  Password
+                  {t.auth.password}
                   <input
                     required
                     type="password"
@@ -84,7 +86,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                 </label>
                 {!isLogin && (
                   <label className="block text-[13px] font-semibold">
-                    Your name
+                    {t.auth.name}
                     <input
                       type="text"
                       placeholder="Guest"
@@ -96,18 +98,18 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                   </label>
                 )}
                 <button className="btn-primary w-full justify-center" type="submit" disabled={loading}>
-                  {loading ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? "Continue to dashboard" : "Create account")}
+                  {loading ? (isLogin ? "Signing in..." : "Creating account...") : (isLogin ? t.auth.loginButton : t.auth.signupButton)}
                   {!loading && <ArrowRight size={16} />}
                 </button>
               </form>
               <p className="mt-7 text-center text-[13px] text-ink-soft">
-                {isLogin ? "New to ARQAU?" : "Already have an account?"}{" "}
-                <Link className="font-bold text-green-deep" href={isLogin ? "/signup" : "/login"}>
-                  {isLogin ? "Create one" : "Sign in"}
+                {isLogin ? t.auth.noAccount : t.auth.hasAccount}{" "}
+                <Link className="font-bold text-orange" href={isLogin ? "/signup" : "/login"}>
+                  {isLogin ? t.auth.switchSignup : t.auth.switchLogin}
                 </Link>
               </p>
               <div className="mt-10 border-t border-ink/[0.08] pt-5 text-center">
-                <Link href="/business/register" className="text-[13px] font-semibold text-ink-soft hover:text-green-deep">
+                <Link href="/business/register" className="text-[13px] font-semibold text-ink-soft hover:text-orange">
                   Register a business instead →
                 </Link>
               </div>
@@ -151,7 +153,7 @@ export function OnboardingPage() {
           <span className="text-[13px] text-ink-soft">Step {step} of 2</span>
         </div>
         <div className="mt-12 h-1 rounded-full bg-ink/[0.08]">
-          <div className="h-1 rounded-full bg-green-deep transition-all" style={{ width: `${(step / 2) * 100}%` }} />
+          <div className="h-1 rounded-full bg-orange transition-all" style={{ width: `${(step / 2) * 100}%` }} />
         </div>
         <div className="mt-16 rounded-[26px] border border-ink/[0.08] bg-white/70 p-7 sm:p-12">
           <p className="eyebrow mb-4">Personalize ARQAU</p>
@@ -184,8 +186,8 @@ export function OnboardingPage() {
                   onClick={() => setPriority(item)}
                   className={`rounded-[14px] border px-4 py-4 text-left text-[14px] font-semibold transition-all ${
                     priority === item
-                      ? "border-green-deep bg-green-soft text-ink shadow-[0_10px_24px_-20px_rgba(47,83,56,0.5)]"
-                      : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-green/50 hover:text-ink"
+                      ? "border-orange-deep bg-orange-soft text-ink shadow-[0_10px_24px_-20px_rgba(47,83,56,0.5)]"
+                      : "border-ink/[0.1] bg-cream/60 text-ink-soft hover:border-orange/50 hover:text-ink"
                   }`}
                 >
                   {item}
@@ -264,9 +266,9 @@ export function BusinessRegistration() {
                   <span
                     className={`flex h-7 w-7 items-center justify-center rounded-full border ${
                       step > index + 1
-                        ? "border-green bg-green text-cream"
+                        ? "border-orange bg-green text-cream"
                         : step === index + 1
-                        ? "border-green-deep bg-green-deep text-cream"
+                        ? "border-orange-deep bg-orange text-cream"
                         : "border-ink/15"
                     }`}
                   >

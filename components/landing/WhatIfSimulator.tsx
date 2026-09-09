@@ -3,16 +3,18 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { scenario, evaluateWithdrawal, formatTenge } from "@/lib/demoData";
+import { useTranslation } from "@/lib/language-context";
 
 const statusStyles: Record<string, { bg: string; text: string; bar: string }> = {
-  comfortable: { bg: "bg-green-soft", text: "text-green-deep", bar: "bg-green-bright" },
-  caution: { bg: "bg-green-soft/60", text: "text-green-deep", bar: "bg-green" },
+  comfortable: { bg: "bg-orange-soft", text: "text-orange", bar: "bg-green-bright" },
+  caution: { bg: "bg-orange-soft/60", text: "text-orange", bar: "bg-green" },
   "high-risk": { bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500" },
 };
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function WhatIfSimulator() {
+  const { t } = useTranslation();
   const [amount, setAmount] = useState(50000);
   const result = useMemo(() => evaluateWithdrawal(amount), [amount]);
   const pct = (amount / scenario.available) * 100;
@@ -38,7 +40,7 @@ export default function WhatIfSimulator() {
             transition={{ duration: 0.6, ease: easeOut }}
             className="text-[38px] sm:text-[50px] lg:text-[58px] font-extrabold leading-[1.02] tracking-[-0.025em] reveal-text text-balance"
           >
-            What happens if you take more?
+            {t.landing.whatIfTitle}
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -47,7 +49,7 @@ export default function WhatIfSimulator() {
             transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
             className="mt-6 text-[18px] leading-[1.7] text-ink-soft reveal-text"
           >
-            Explore the decision before you make it. Move the slider to see how a withdrawal affects your reserve.
+            {t.landing.whatIfSubtitle}
           </motion.p>
         </div>
 
@@ -59,8 +61,8 @@ export default function WhatIfSimulator() {
           className="rounded-[30px] border border-ink/[0.08] bg-white p-8 sm:p-11 lg:p-14 max-w-[920px] shadow-[0_30px_70px_-50px_rgba(21,21,21,0.65)]"
         >
           <div className="flex items-baseline justify-between mb-2">
-            <p className="text-[13px] text-ink-soft">Withdrawal amount</p>
-            <p className="text-[13px] text-ink-soft">Available: {formatTenge(scenario.available)}</p>
+            <p className="text-[13px] text-ink-soft">{t.landing.whatIfWithdrawalAmount}</p>
+            <p className="text-[13px] text-ink-soft">{t.whatIf.available}: {formatTenge(scenario.available)}</p>
           </div>
 
           <motion.p
@@ -100,7 +102,7 @@ export default function WhatIfSimulator() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.22 }}
             >
-              <p className="text-[12px] text-ink-soft mb-1.5">Remaining balance</p>
+              <p className="text-[12px] text-ink-soft mb-1.5">{t.whatIf.remainingBalance}</p>
               <p className="text-[23px] font-bold tracking-tight numbers">{formatTenge(result.remainingAvailable)}</p>
             </motion.div>
             <motion.div
@@ -109,7 +111,7 @@ export default function WhatIfSimulator() {
               viewport={{ once: true, margin: "-80px" }}
               transition={{ duration: 0.45, delay: 0.12, ease: easeOut }}
             >
-              <p className="text-[12px] text-ink-soft mb-1.5">Upcoming expenses</p>
+              <p className="text-[12px] text-ink-soft mb-1.5">{t.whatIf.upcomingExpenses}</p>
               <p className="text-[23px] font-bold tracking-tight numbers">{formatTenge(scenario.upcomingExpensesTotal)}</p>
             </motion.div>
             <motion.div
@@ -118,7 +120,7 @@ export default function WhatIfSimulator() {
               viewport={{ once: true, margin: "-80px" }}
               transition={{ duration: 0.45, delay: 0.18, ease: easeOut }}
             >
-              <p className="text-[12px] text-ink-soft mb-1.5">Reserve target</p>
+              <p className="text-[12px] text-ink-soft mb-1.5">{t.whatIf.reserveTarget}</p>
               <p className="text-[23px] font-bold tracking-tight">{formatTenge(scenario.reserveTarget)}</p>
             </motion.div>
           </div>
@@ -134,7 +136,7 @@ export default function WhatIfSimulator() {
             <p className="text-[14.5px] text-ink-soft leading-relaxed">{result.note}</p>
           </motion.div>
 
-          <p className="mt-4 text-[11px] text-ink-soft/50">Illustrative example — values are fictional demo data.</p>
+          <p className="mt-4 text-[11px] text-ink-soft/50">{t.whatIf.illustrative}</p>
         </motion.div>
       </div>
     </section>

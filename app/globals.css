@@ -7,14 +7,10 @@
   --ink: #161412;
   --ink-soft: #5c5750;
   --ink-muted: #8a837a;
-  --orange: #ff5a1f;
-  --orange-2: #ff7a3d;
-  --orange-dark: #c94718;
-  --orange-soft: #fbeae0;
-  --green: #4f7a52;
-  --green-deep: #2f5338;
-  --green-soft: #e8f0e6;
-  --green-bright: #5e9a68;
+  --orange: #C65D2E;
+  --orange-2: #D97A4F;
+  --orange-dark: #A94720;
+  --orange-soft: #F4E4DA;
   --near-black: #12100e;
   --border: rgba(22, 20, 18, 0.08);
   --border-strong: rgba(22, 20, 18, 0.14);
@@ -39,10 +35,6 @@
   --color-orange-2: var(--orange-2);
   --color-orange-dark: var(--orange-dark);
   --color-orange-soft: var(--orange-soft);
-  --color-green: var(--green);
-  --color-green-deep: var(--green-deep);
-  --color-green-soft: var(--green-soft);
-  --color-green-bright: var(--green-bright);
   --color-near-black: var(--near-black);
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Fraunces", ui-serif, Georgia, serif;
@@ -173,7 +165,7 @@ body {
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--green-deep);
+    color: var(--orange);
   }
 
   .statement-frame {
@@ -200,7 +192,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: var(--green-deep);
+    background: var(--orange);
     color: var(--cream);
     padding: 15px 28px;
     border-radius: var(--radius-sm);
@@ -242,11 +234,11 @@ body {
 
   .btn-secondary:hover {
     border-color: var(--ink);
-    color: var(--green-deep);
+    color: var(--orange);
   }
 
   .focus-ring:focus-visible {
-    outline: 2px solid var(--green-bright);
+    outline: 2px solid var(--orange);
     outline-offset: 3px;
     border-radius: 4px;
   }

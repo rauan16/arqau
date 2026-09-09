@@ -1,10 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useTranslation } from "@/lib/language-context";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function BrandStatement() {
+  const { t } = useTranslation();
   return (
     <section className="py-28 lg:py-40 bg-cream">
       <div className="container-arqau">
@@ -16,8 +18,8 @@ export default function BrandStatement() {
           transition={{ duration: 0.7, ease: easeOut }}
           className="text-[38px] sm:text-[52px] lg:text-[68px] leading-[1.04] font-medium tracking-[-0.03em] max-w-[940px] text-balance"
         >
-          Getting paid earlier is only half the story.{" "}
-          <span className="font-serif italic text-green-deep">Knowing what to do with it is the other half.</span>
+          {t.landing.brandStatementTitle}{" "}
+          <span className="font-serif italic text-orange">{t.landing.brandStatementSubtitle}</span>
         </motion.h2>
         <motion.p
           initial={{ opacity: 0, y: 12 }}
@@ -26,7 +28,7 @@ export default function BrandStatement() {
           transition={{ duration: 0.6, delay: 0.2, ease: easeOut }}
           className="mt-8 text-[17px] leading-[1.7] text-ink-soft max-w-[480px]"
         >
-          ARQAU is building the financial intelligence layer between earned income and everyday decisions.
+          {t.landing.brandStatementBody}
         </motion.p>
         </div>
       </div>

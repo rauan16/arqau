@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import MiniPhoneFrame from "./MiniPhoneFrame";
 import { EarningsScreen, ExpensesScreen, RecommendationScreen, WhatIfScreen, AIScreen } from "./ShowcaseScreens";
+import { useTranslation } from "@/lib/language-context";
 
 const screens = [
   { comp: EarningsScreen, label: "Earnings", rotate: -5 },
@@ -15,6 +16,7 @@ const screens = [
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function ProductShowcase() {
+  const { t } = useTranslation();
   return (
     <section id="features" className="py-28 lg:py-36 bg-cream-orange overflow-hidden">
       <div className="container-arqau grid lg:grid-cols-[0.75fr_1.25fr] gap-16 items-center">

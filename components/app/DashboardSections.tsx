@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, CircleDollarSign, Plus, Search, Send, Sparkles, TrendingDown, TrendingUp, AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useTranslation } from "@/lib/language-context";
 import { api, Transaction, FinanceSummary, EarnedWages, WageAccessRequest, WithdrawalAnalysis } from "@/lib/api";
 
 const panel = "rounded-[16px] border border-ink/[0.07] bg-white/70 p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)]";
@@ -26,7 +27,7 @@ function PageFrame({ eyebrow, title, copy, children }: { eyebrow: string; title:
 
 function Metric({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return <div className={panel}>
-    <div className="flex items-center justify-between text-green-deep">
+    <div className="flex items-center justify-between text-orange">
       <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-soft">{label}</p>
       {icon}
     </div>
@@ -57,6 +58,7 @@ function EmptyState({ title, description, actionLabel, actionHref, onAction }: {
 }
 
 export function FinancePage() {
+  const { t } = useTranslation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,7 @@ export function FinancePage() {
       setTransactions(txns);
       setSummary(summaryData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load financial data. Please try again.");
+      setError(err instanceof Error ? err.message : t.expenses.unableToLoad);
     } finally {
       setLoading(false);
     }
@@ -105,7 +107,7 @@ export function FinancePage() {
       setShowAdd(false);
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save transaction. Please try again.");
+      setError(err instanceof Error ? err.message : t.expenses.unableToSave);
     } finally {
       setSaving(false);
     }
@@ -115,43 +117,43 @@ export function FinancePage() {
   const expense = summary?.total_expense_minor || 0;
 
   if (loading) {
-    return <PageFrame eyebrow="Finance" title="See the money in context." copy="Loading your financial data...">
-      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-green-deep" size={24} /></div>
+    return <PageFrame eyebrow="Finance" title="See the money in context." copy={t.expenses.loadingData}>
+      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-orange" size={24} /></div>
     </PageFrame>;
   }
 
-  return <PageFrame eyebrow="Finance" title="See the money in context." copy="Track income, expenses and net balance in one place.">
+  return <PageFrame eyebrow="Finance" title="See the money in context." copy={t.expenses.subtitle}>
     {error && <div className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700 flex items-center gap-2"><AlertCircle size={16} />{error}</div>}
     <div className="grid gap-5 md:grid-cols-3">
-      <Metric label="Income" value={income ? `${formatTenge(income)} ₸` : "—"} icon={<TrendingUp />} />
-      <Metric label="Expenses" value={expense ? `${formatTenge(expense)} ₸` : "—"} icon={<TrendingDown />} />
-      <Metric label="Net Balance" value={summary ? `${formatTenge(summary.net_balance_minor)} ₸` : "—"} icon={<CircleDollarSign />} />
+      <Metric label={t.expenses.income} value={income ? `${formatTenge(income)} ₸` : "—"} icon={<TrendingUp />} />
+      <Metric label={t.expenses.expensesLabel} value={expense ? `${formatTenge(expense)} ₸` : "—"} icon={<TrendingDown />} />
+      <Metric label={t.expenses.netBalance} value={summary ? `${formatTenge(summary.net_balance_minor)} ₸` : "—"} icon={<CircleDollarSign />} />
     </div>
 
     <div className="mt-5 grid gap-5 lg:grid-cols-1">
       <section className={panel}>
         <div className="flex items-center justify-between">
-          <h2 className="text-[18px] font-bold">Transactions</h2>
+          <h2 className="text-[18px] font-bold">{t.expenses.transactions}</h2>
           <button onClick={() => setShowAdd(!showAdd)} className="btn-primary px-3 py-2 text-[12px]">
-            <Plus size={14} /> Add
+            <Plus size={14} /> {t.expenses.addTransaction}
           </button>
         </div>
         {showAdd && (
           <div className="mt-4 space-y-3">
             <div className="flex gap-2">
-              <button onClick={() => setTxType("income")} className={`flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-semibold transition-colors ${txType === "income" ? "border-green bg-green-soft text-green-deep" : "border-ink/10 hover:border-green/30"}`}>Income</button>
-              <button onClick={() => setTxType("expense")} className={`flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-semibold transition-colors ${txType === "expense" ? "border-orange bg-orange-soft text-orange-dark" : "border-ink/10 hover:border-orange/30"}`}>Expense</button>
+              <button onClick={() => setTxType("income")} className={`flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-semibold transition-colors ${txType === "income" ? "border-orange bg-orange-soft text-orange" : "border-ink/10 hover:border-orange/30"}`}>{t.expenses.typeIncome}</button>
+              <button onClick={() => setTxType("expense")} className={`flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-semibold transition-colors ${txType === "expense" ? "border-orange bg-orange-soft text-orange-dark" : "border-ink/10 hover:border-orange/30"}`}>{t.expenses.typeExpense}</button>
             </div>
-            <input type="number" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} placeholder="Amount (₸)" aria-label="Amount" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep numbers" />
-            <input value={txCategory} onChange={(e) => setTxCategory(e.target.value)} placeholder="Category (optional)" aria-label="Category" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep" />
-            <input value={txMerchant} onChange={(e) => setTxMerchant(e.target.value)} placeholder="Description (optional)" aria-label="Description" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep" />
+            <input type="number" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} placeholder={t.expenses.amount} aria-label={t.expenses.amount} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
+            <input value={txCategory} onChange={(e) => setTxCategory(e.target.value)} placeholder={t.expenses.category} aria-label={t.expenses.category} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
+            <input value={txMerchant} onChange={(e) => setTxMerchant(e.target.value)} placeholder={t.expenses.merchant} aria-label={t.expenses.merchant} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
             <button onClick={handleAddTransaction} disabled={saving || !txAmount} className="btn-primary w-full justify-center disabled:opacity-50">
-              {saving ? "Saving..." : "Save transaction"}
+              {saving ? t.expenses.saving : t.expenses.save}
             </button>
           </div>
         )}
         {transactions.length === 0 ? (
-          <p className="mt-6 text-[14px] text-ink-soft">No transactions yet. Add your first income or expense above.</p>
+          <p className="mt-6 text-[14px] text-ink-soft">{t.expenses.noTransactions}</p>
         ) : (
           <div className="mt-6 space-y-3">
             {transactions.slice(0, 20).map((item) => (
@@ -173,6 +175,7 @@ export function FinancePage() {
 }
 
 export function AIPage() {
+  const { t } = useTranslation();
   const [earned, setEarned] = useState<EarnedWages | null>(null);
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const [analysis, setAnalysis] = useState<WithdrawalAnalysis | null>(null);
@@ -200,7 +203,7 @@ export function AIPage() {
   async function handleAnalyze() {
     const amount = Number(withdrawalAmount);
     if (!amount || amount <= 0) {
-      setAnalysisError("Enter a valid amount to analyze.");
+      setAnalysisError(t.withdraw.errorValid);
       return;
     }
     if (earned && amount > earned.available_amount_minor) {
@@ -213,7 +216,7 @@ export function AIPage() {
       const result = await api.ai.analyzeWithdrawal(amount);
       setAnalysis(result);
     } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
+      setAnalysisError(err instanceof Error ? err.message : t.ai.unavailable);
     } finally {
       setAnalyzing(false);
     }
@@ -278,13 +281,13 @@ export function AIPage() {
     ];
   }, [earned]);
 
-  return <PageFrame eyebrow="ARQAU assistant" title="Explore your financial context." copy="Understand your earned income, expenses and withdrawal options with ARQAU analysis.">
+  return <PageFrame eyebrow={t.ai.title} title="Explore your financial context." copy={t.ai.subtitle}>
     <div className="grid gap-5 lg:grid-cols-[1fr_0.35fr]">
       <section className={`${panel} max-w-[760px]`}>
-        <h2 className="mb-4 text-[16px] font-bold">Withdrawal analysis</h2>
+        <h2 className="mb-4 text-[16px] font-bold">{t.ai.withdrawalAnalysis}</h2>
         {earned && (
-          <div className="mb-4 rounded-[12px] bg-green-soft px-4 py-3 text-[13px] text-ink-soft">
-            Available to access: <span className="font-bold text-green-deep numbers">{formatTenge(earned.available_amount_minor)} ₸</span>
+          <div className="mb-4 rounded-[12px] bg-orange-soft px-4 py-3 text-[13px] text-ink-soft">
+            {t.withdraw.available}: <span className="font-bold text-orange numbers">{formatTenge(earned.available_amount_minor)} ₸</span>
           </div>
         )}
         <div className="flex gap-2">
@@ -294,7 +297,7 @@ export function AIPage() {
             onChange={(e) => { setWithdrawalAmount(e.target.value); setAnalysis(null); setAnalysisError(""); }}
             placeholder="Enter amount to analyze (₸)"
             aria-label="Withdrawal amount"
-            className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep numbers"
+            className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers"
           />
           <button onClick={handleAnalyze} disabled={analyzing} className="btn-primary px-4">
             {analyzing ? <Loader2 className="animate-spin" size={16} /> : "Analyze"}
@@ -302,8 +305,8 @@ export function AIPage() {
         </div>
         {analyzing && (
           <div className="mt-4 flex items-center gap-2 rounded-[12px] border border-ink/[0.08] bg-cream px-4 py-3 text-[13px] text-ink-soft">
-            <Loader2 className="animate-spin text-green-deep" size={16} />
-            Analyzing your financial context...
+            <Loader2 className="animate-spin text-orange" size={16} />
+            {t.dashboard.analyzing}
           </div>
         )}
         {analysisError && (
@@ -314,21 +317,21 @@ export function AIPage() {
         {analysis && !analyzing && (
           <div className="mt-4 space-y-3 rounded-[12px] border border-ink/[0.08] bg-cream p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">Risk level</span>
+              <span className="text-[13px] text-ink-soft">{t.ai.riskLevel}</span>
               <span className={`text-[13px] font-bold ${analysis.risk_level === "low" ? "text-green" : analysis.risk_level === "medium" ? "text-yellow-600" : "text-red-600"}`}>
                 {analysis.risk_level.toUpperCase()}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">Recommendation</span>
+              <span className="text-[13px] text-ink-soft">{t.ai.recommendation}</span>
               <span className="text-[13px] font-bold capitalize">{analysis.recommendation.replace(/_/g, " ")}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">Remaining after withdrawal</span>
+              <span className="text-[13px] text-ink-soft">{t.ai.remainingAfter}</span>
               <span className="text-[13px] font-bold numbers">{formatTenge(analysis.remaining_amount)} ₸</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">Reserve status</span>
+              <span className="text-[13px] text-ink-soft">{t.ai.reserveStatus}</span>
               <span className="text-[13px] font-bold capitalize">{analysis.reserve_status}</span>
             </div>
             <div className="border-t border-ink/[0.08] pt-3">
@@ -338,12 +341,12 @@ export function AIPage() {
           </div>
         )}
       </section>
-      <aside className="rounded-[20px] border border-green/20 bg-green-soft p-5">
-        <div className="flex items-center gap-2 text-green-deep"><Sparkles size={18} /><h2 className="font-bold">Suggested questions</h2></div>
+      <aside className="rounded-[20px] border border-orange/20 bg-orange-soft p-5">
+        <div className="flex items-center gap-2 text-orange"><Sparkles size={18} /><h2 className="font-bold">Suggested questions</h2></div>
         <p className="mt-2 text-[12px] text-ink-soft">Tap a question to ask ARQAU</p>
         <div className="mt-4 space-y-2">
           {contextualPrompts.map((prompt) => (
-            <button key={prompt} onClick={() => { setMessage(prompt); }} className="w-full rounded-[10px] border border-green/20 bg-cream px-3 py-2.5 text-left text-[13px] font-semibold text-green-deep transition-colors hover:bg-green hover:text-cream">
+            <button key={prompt} onClick={() => { setMessage(prompt); }} className="w-full rounded-[10px] border border-orange/20 bg-cream px-3 py-2.5 text-left text-[13px] font-semibold text-orange transition-colors hover:bg-green hover:text-cream">
               {prompt}
             </button>
           ))}
@@ -351,10 +354,10 @@ export function AIPage() {
       </aside>
     </div>
     <section className={`${panel} mt-5 max-w-[760px]`}>
-      <h2 className="mb-4 text-[16px] font-bold">Ask about your finances</h2>
+      <h2 className="mb-4 text-[16px] font-bold">{t.dashboard.askAboutFinances}</h2>
       {chatError && (
         <div className="mb-3 rounded-[10px] border border-yellow-200 bg-yellow-50 px-4 py-3 text-[13px] text-yellow-800 flex items-center justify-between gap-3">
-          <span>AI assistant is temporarily unavailable. Withdrawal analysis is still available above.</span>
+          <span>{t.ai.unavailable}. Withdrawal analysis is still available above.</span>
           <button onClick={handleRetryChat} disabled={sending || chatDisabled || !message.trim()} className="shrink-0 rounded-[8px] border border-yellow-300 bg-yellow-100 px-3 py-1.5 text-[12px] font-bold text-yellow-900 transition-colors hover:bg-yellow-200 disabled:opacity-50">
             Retry
           </button>
@@ -365,18 +368,18 @@ export function AIPage() {
           <p className="text-[13px] text-ink-soft">Ask questions about your financial context...</p>
         )}
         {chatHistory.map((item, i) => (
-          <div key={i} className={`max-w-[82%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${item.from === "you" ? "ml-auto bg-ink text-cream" : "bg-green-soft text-ink"}`}>
+          <div key={i} className={`max-w-[82%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${item.from === "you" ? "ml-auto bg-ink text-cream" : "bg-orange-soft text-ink"}`}>
             {item.text}
           </div>
         ))}
         {chatDisabled && sending && chatHistory.length > 0 && (
-          <div className="max-w-[82%] rounded-[16px] bg-green-soft px-4 py-3 text-[14px] leading-relaxed">
+          <div className="max-w-[82%] rounded-[16px] bg-orange-soft px-4 py-3 text-[14px] leading-relaxed">
             <span className="inline-flex items-center gap-2 text-ink-soft"><Loader2 className="animate-spin" size={14} /> Analyzing your financial context...</span>
           </div>
         )}
       </div>
       <form className="mt-4 flex gap-2 border-t border-ink/[0.08] pt-4" onSubmit={handleChat}>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your finances..." aria-label="Ask about your finances" className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep" disabled={sending || chatDisabled} />
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your finances..." aria-label="Ask about your finances" className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" disabled={sending || chatDisabled} />
         <button className="btn-primary px-4" type="submit" disabled={sending || chatDisabled || !message.trim()}>
           {sending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
         </button>
@@ -386,6 +389,7 @@ export function AIPage() {
 }
 
 export function GetMoneyPage() {
+  const { t } = useTranslation();
   const [earned, setEarned] = useState<EarnedWages | null>(null);
   const [requests, setRequests] = useState<WageAccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -417,11 +421,11 @@ export function GetMoneyPage() {
   async function handleRequest() {
     const amt = Number(amount);
     if (!amt || amt <= 0) {
-      setError("Enter a valid amount to request.");
+      setError(t.withdraw.errorValid);
       return;
     }
     if (earned && amt > earned.available_amount_minor) {
-      setError(`Requested amount exceeds available balance of ${formatTenge(earned.available_amount_minor)} ₸.`);
+      setError(t.withdraw.errorExceeds.replace("{amount}", formatTenge(earned.available_amount_minor)));
       return;
     }
     setSubmitting(true);
@@ -431,7 +435,7 @@ export function GetMoneyPage() {
       await api.ewa.createRequest({ amount_minor: amt, reason: reason || undefined });
       setAmount("");
       setReason("");
-      setSuccess("Request submitted. You can track its status in History.");
+      setSuccess(t.withdraw.success);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to submit request. Please try again.");
@@ -442,7 +446,7 @@ export function GetMoneyPage() {
 
   if (loading) {
     return <PageFrame eyebrow="Get money" title="Access what you have already earned." copy="Loading your earned wages...">
-      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-green-deep" size={24} /></div>
+      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-orange" size={24} /></div>
     </PageFrame>;
   }
 
@@ -453,63 +457,63 @@ export function GetMoneyPage() {
 
   return <PageFrame eyebrow="Get money" title="Access what you have already earned." copy="ARQAU calculates your available amount from earned income and withdrawals. Request only what you need.">
     {error && <div className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700 flex items-center gap-2"><AlertCircle size={16} />{error}</div>}
-    {success && <div className="mb-4 rounded-[10px] border border-green/20 bg-green-soft px-4 py-3 text-[13px] text-green-deep flex items-center gap-2"><Check size={16} />{success}</div>}
+    {success && <div className="mb-4 rounded-[10px] border border-orange/20 bg-orange-soft px-4 py-3 text-[13px] text-orange flex items-center gap-2"><Check size={16} />{success}</div>}
 
     {hasEarned ? (
       <section className={panel}>
-        <h2 className="mb-4 text-[18px] font-bold">Your earned wages</h2>
+        <h2 className="mb-4 text-[18px] font-bold">{t.earnings.title}</h2>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <p className="text-[12px] text-ink-soft">Earned</p>
+            <p className="text-[12px] text-ink-soft">{t.earnings.earned}</p>
             <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.earned_amount_minor)} ₸</p>
           </div>
           <div>
-            <p className="text-[12px] text-ink-soft">Accessed</p>
+            <p className="text-[12px] text-ink-soft">{t.earnings.accessed}</p>
             <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.accessed_amount_minor)} ₸</p>
           </div>
           <div>
-            <p className="text-[12px] text-ink-soft">Available</p>
-            <p className="mt-1 text-[28px] font-extrabold tracking-tight text-green-deep numbers">{formatTenge(available)} ₸</p>
+            <p className="text-[12px] text-ink-soft">{t.earnings.available}</p>
+            <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange numbers">{formatTenge(available)} ₸</p>
           </div>
         </div>
 
         <div className="mt-5 border-t border-ink/[0.06] pt-5">
-          <h3 className="mb-4 text-[15px] font-bold">Request access</h3>
+          <h3 className="mb-4 text-[15px] font-bold">{t.withdraw.amountLabel}</h3>
           <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="rounded-[12px] bg-cream px-4 py-3">
-              <p className="text-[12px] text-ink-soft">Requesting</p>
+              <p className="text-[12px] text-ink-soft">{t.withdraw.amountLabel}</p>
               <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(requestedAmount)} ₸</p>
             </div>
             <div className="rounded-[12px] bg-cream px-4 py-3">
-              <p className="text-[12px] text-ink-soft">Remaining after</p>
+              <p className="text-[12px] text-ink-soft">{t.withdraw.remaining}</p>
               <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(remaining)} ₸</p>
             </div>
             <div className="rounded-[12px] bg-cream px-4 py-3 sm:col-span-1 col-span-2">
-              <p className="text-[12px] text-ink-soft">Available limit</p>
+              <p className="text-[12px] text-ink-soft">{t.withdraw.available}</p>
               <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(available)} ₸</p>
             </div>
           </div>
           <div className="space-y-3">
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={`Amount up to ${formatTenge(available)} ₸`} aria-label="Amount to request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep numbers" />
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" aria-label="Reason for request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-green-deep" />
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={`Amount up to ${formatTenge(available)} ₸`} aria-label="Amount to request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional)" aria-label="Reason for request" className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
             <button onClick={handleRequest} disabled={submitting || !amount || Number(amount) <= 0 || Number(amount) > available} className="btn-primary w-full justify-center disabled:opacity-50">
-              {submitting ? "Submitting..." : "Submit request"}
+              {submitting ? "Submitting..." : t.withdraw.submit}
             </button>
           </div>
         </div>
       </section>
     ) : (
       <EmptyState
-        title="Earned wage access"
-        description="Set your earned wages in Finance to see your available balance and request access."
-        actionLabel="Set earned wages"
+        title={t.withdraw.emptyTitle}
+        description={t.withdraw.emptyDescription}
+        actionLabel={t.withdraw.emptyCta}
         actionHref="/dashboard/finance"
       />
     )}
 
     {requests.length > 0 && (
       <section className={`${panel} mt-5`}>
-        <h2 className="mb-4 text-[18px] font-bold">Request history</h2>
+        <h2 className="mb-4 text-[18px] font-bold">{t.history.title}</h2>
         <div className="space-y-3">
           {requests.map((req) => (
             <div key={req.id} className="flex items-center justify-between rounded-[12px] border border-ink/[0.08] bg-cream px-4 py-3">
@@ -534,6 +538,7 @@ export function GetMoneyPage() {
 }
 
 export function HistoryPage() {
+  const { t } = useTranslation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [requests, setRequests] = useState<WageAccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -587,35 +592,35 @@ export function HistoryPage() {
   }, [allItems, query]);
 
   if (loading) {
-    return <PageFrame eyebrow="History" title="Every transaction, in context." copy="Loading...">
-      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-green-deep" size={24} /></div>
+    return <PageFrame eyebrow={t.history.title} title="Every transaction, in context." copy={t.history.loading}>
+      <div className="flex h-40 items-center justify-center"><Loader2 className="animate-spin text-orange" size={24} /></div>
     </PageFrame>;
   }
 
-  return <PageFrame eyebrow="History" title="Every transaction, in context." copy="Search and review the activity behind your balance.">
+  return <PageFrame eyebrow={t.history.title} title="Every transaction, in context." copy={t.history.subtitle}>
     <section className={panel}>
       {allItems.length === 0 ? (
         <EmptyState
-          title="No activity yet"
-          description="Add income or expenses to start building your financial history."
-          actionLabel="Add financial data"
+          title={t.history.emptyTitle}
+          description={t.history.emptyDescription}
+          actionLabel={t.history.emptyCta}
           actionHref="/dashboard/finance"
         />
       ) : (
         <>
           <div className="relative max-w-[360px]">
             <Search size={16} className="absolute left-3 top-3.5 text-ink-soft" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search activity" aria-label="Search activity" className="w-full rounded-[10px] border border-ink/[0.1] bg-cream py-3 pl-9 pr-3 text-[14px] outline-none transition-colors focus:border-green-deep" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.history.searchPlaceholder} aria-label={t.history.searchPlaceholder} className="w-full rounded-[10px] border border-ink/[0.1] bg-cream py-3 pl-9 pr-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
           </div>
           <div className="mt-6 overflow-x-auto">
             <table className="w-full min-w-[620px] text-left text-[13px]">
               <thead className="border-b border-ink/[0.08] text-[11px] uppercase tracking-[0.1em] text-ink-soft">
                 <tr>
-                  <th className="pb-3">Description</th>
-                  <th className="pb-3">Category</th>
-                  <th className="pb-3">Date</th>
-                  <th className="pb-3">Type</th>
-                  <th className="pb-3 text-right">Amount</th>
+                  <th className="pb-3">{t.history.description}</th>
+                  <th className="pb-3">{t.history.category}</th>
+                  <th className="pb-3">{t.history.date}</th>
+                  <th className="pb-3">{t.history.type}</th>
+                  <th className="pb-3 text-right">{t.history.amount}</th>
                 </tr>
               </thead>
               <tbody>
@@ -632,7 +637,7 @@ export function HistoryPage() {
                 ))}
               </tbody>
             </table>
-            {filtered.length === 0 && <p className="py-10 text-center text-[14px] text-ink-soft">No activity matches your search.</p>}
+            {filtered.length === 0 && <p className="py-10 text-center text-[14px] text-ink-soft">{t.expenses.noResults}</p>}
           </div>
         </>
       )}
@@ -642,6 +647,7 @@ export function HistoryPage() {
 
 export function SettingsPage() {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
 
   async function handleLogout() {
@@ -649,36 +655,36 @@ export function SettingsPage() {
     router.push("/login");
   }
 
-  return <PageFrame eyebrow="Settings" title="Your preferences, your pace." copy="Manage the details that shape your ARQAU experience.">
+  return <PageFrame eyebrow={t.settings.title} title="Your preferences, your pace." copy={t.settings.subtitle}>
     <div className="grid max-w-[760px] gap-5">
       <section className={`${panel}`}>
-        <h2 className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-soft">Account</h2>
+        <h2 className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-soft">{t.settings.account}</h2>
         <div className="mt-4 space-y-4">
           <div className="flex items-center justify-between gap-5">
             <div>
               <p className="text-[13px] font-semibold">{user?.name || "—"}</p>
               <p className="text-[12px] text-ink-soft">{user?.email}</p>
             </div>
-            <span className="text-[11px] font-semibold text-ink-soft">Name / Email</span>
+            <span className="text-[11px] font-semibold text-ink-soft">{t.settings.nameEmail}</span>
           </div>
           <div className="border-t border-ink/[0.06] pt-3 flex items-center justify-between gap-5">
             <div>
-              <p className="text-[13px] font-semibold">{user?.is_verified ? "Verified" : "Not verified"}</p>
-              <p className="text-[12px] text-ink-soft">Email verification status</p>
+              <p className="text-[13px] font-semibold">{user?.is_verified ? t.settings.active : t.settings.pending}</p>
+              <p className="text-[12px] text-ink-soft">{t.settings.verificationStatus}</p>
             </div>
-            <span className={`text-[11px] font-semibold ${user?.is_verified ? "text-green" : "text-orange-dark"}`}>{user?.is_verified ? "Active" : "Pending"}</span>
+            <span className={`text-[11px] font-semibold ${user?.is_verified ? "text-green" : "text-orange-dark"}`}>{user?.is_verified ? t.settings.active : t.settings.pending}</span>
           </div>
         </div>
       </section>
 
       <section className={panel}>
-        <h2 className="font-bold">Account actions</h2>
-        <p className="mt-1 text-[13px] text-ink-soft">Sign out of your ARQAU account.</p>
+        <h2 className="font-bold">{t.settings.accountActions}</h2>
+        <p className="mt-1 text-[13px] text-ink-soft">{t.settings.signOutConfirm}</p>
         <button
           onClick={handleLogout}
           className="mt-4 rounded-[10px] border border-ink/10 bg-cream px-4 py-2.5 text-[13px] font-bold text-ink transition-colors hover:bg-ink hover:text-cream"
         >
-          Sign out
+          {t.settings.signOut}
         </button>
       </section>
     </div>

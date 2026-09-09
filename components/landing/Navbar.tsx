@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
+import LanguageSwitcher from "@/components/app/LanguageSwitcher";
+import { useTranslation } from "@/lib/language-context";
 
 const links = [
-  { label: "Product", href: "#difference" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "For employers", href: "#employers" },
-  { label: "AI assistant", href: "#ai-assistant" },
+  { labelKey: "landing.howItWorksTitle", href: "#how-it-works" },
+  { labelKey: "navAI", href: "#ai-assistant" },
+  { labelKey: "landing.employerTitle", href: "#employers" },
 ];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -35,11 +37,11 @@ export default function Navbar() {
         <nav className="hidden md:flex items-center gap-9">
           {links.map((l) => (
             <a
-              key={l.label}
+              key={l.href}
               href={l.href}
               className="text-[14.5px] text-ink-soft hover:text-ink transition-colors focus-ring"
             >
-              {l.label}
+              {t[l.labelKey as keyof typeof t] as string}
             </a>
           ))}
           <a href="/login" onClick={() => setOpen(false)} className="py-4 text-[15px] font-semibold text-ink border-b border-ink/[0.08]">Login</a>
@@ -48,6 +50,7 @@ export default function Navbar() {
         <div className="hidden items-center gap-5 md:flex">
           <a href="/login" className="text-[14px] font-semibold text-ink-soft hover:text-ink">Login</a>
           <a href="/signup" className="btn-primary">Get started <span className="btn-arrow">→</span></a>
+          <LanguageSwitcher />
         </div>
 
         <button
@@ -62,18 +65,13 @@ export default function Navbar() {
       {open && (
         <div className="md:hidden bg-cream border-t border-ink/[0.08] px-6 pb-7 pt-3 flex flex-col gap-1 shadow-[0_24px_40px_-32px_rgba(21,21,21,0.55)]">
           {links.map((l) => (
-            <a
-              key={l.label}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="py-4 text-[15px] text-ink border-b border-ink/[0.08] last:border-none"
-            >
-              {l.label}
+            <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="py-3 text-[15px] font-medium text-ink-soft">
+              {t[l.labelKey as keyof typeof t] as string}
             </a>
           ))}
-          <a href="/signup" onClick={() => setOpen(false)} className="btn-primary justify-center mt-4">
-            Get started <span>→</span>
-          </a>
+          <a href="/login" onClick={() => setOpen(false)} className="py-3 text-[15px] font-medium text-ink-soft">Login</a>
+          <a href="/signup" onClick={() => setOpen(false)} className="btn-primary mt-2 w-fit">Get started <span className="btn-arrow">→</span></a>
+          <div className="mt-2"><LanguageSwitcher /></div>
         </div>
       )}
     </header>

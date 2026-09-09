@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { CircleDollarSign, Sparkles, HandCoins, Shuffle, MessageCircle, ShieldCheck } from "lucide-react";
+import { useTranslation } from "@/lib/language-context";
 
 const features = [
   [CircleDollarSign, "Earned wages", "See what you have already earned, in real time."],
@@ -15,6 +16,7 @@ const features = [
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function DifferenceSection() {
+  const { t } = useTranslation();
   return (
     <section id="difference" className="py-28 lg:py-36 bg-cream">
       <div className="container-arqau grid lg:grid-cols-[0.85fr_1.5fr] gap-16 lg:gap-24 items-start">
@@ -26,7 +28,7 @@ export default function DifferenceSection() {
             transition={{ duration: 0.5, ease: easeOut }}
             className="eyebrow mb-5 uppercase"
           >
-            Why ARQAU
+            {t.landing.differenceEyebrow}
           </motion.p>
 
           <motion.h2
@@ -36,11 +38,9 @@ export default function DifferenceSection() {
             transition={{ duration: 0.6, ease: easeOut }}
             className="text-[36px] sm:text-[46px] lg:text-[52px] font-extrabold leading-[1.03] tracking-[-0.02em] max-w-[460px] text-balance"
           >
-            More than
+            {t.landing.differenceTitle}
             <br />
-            just access.
-            <br />
-            <span className="font-serif italic font-medium text-green-deep">It&apos;s a smarter way to manage your money.</span>
+            <span className="font-serif italic font-medium text-orange">{t.landing.differenceSubtitle}</span>
           </motion.h2>
 
           <motion.p
@@ -50,7 +50,7 @@ export default function DifferenceSection() {
             transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
             className="mt-6 text-[16px] leading-[1.7] text-ink-soft max-w-[400px]"
           >
-            ARQAU doesn&apos;t just show you how much you can withdraw. It helps you decide how much to take, based on your upcoming expenses and financial goals.
+            {t.landing.differenceBody}
           </motion.p>
         </div>
 
@@ -64,7 +64,7 @@ export default function DifferenceSection() {
               transition={{ duration: 0.5, delay: index * 0.07, ease: easeOut }}
               className="card p-6 min-h-[170px] flex flex-col"
             >
-              <div className="w-11 h-11 rounded-full border border-green/25 bg-green-soft flex items-center justify-center text-green-deep mb-4">
+              <div className="w-11 h-11 rounded-full border border-orange/25 bg-orange-soft flex items-center justify-center text-orange mb-4">
                 <Icon size={18} strokeWidth={1.7} />
               </div>
               <h3 className="text-[15px] font-semibold mb-1.5 reveal-text">{title as string}</h3>

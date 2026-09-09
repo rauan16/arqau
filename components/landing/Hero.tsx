@@ -6,6 +6,7 @@ import PhoneFrame from "./PhoneFrame";
 import HeroScreen from "./HeroScreen";
 import FloatingInsightCard from "./FloatingInsightCard";
 import { scenario, upcomingExpenses, weeklyEarnings, formatTenge } from "@/lib/demoData";
+import { useTranslation } from "@/lib/language-context";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 const easeInOut = "easeInOut" as const;
@@ -30,12 +31,13 @@ const floatY = (duration: number, delay: number) => ({
 });
 
 export default function Hero() {
+  const { t } = useTranslation();
   const maxEarn = Math.max(...weeklyEarnings);
 
   return (
     <section id="top" className="relative min-h-[700px] lg:min-h-[800px] overflow-hidden pt-[120px] pb-20 lg:pt-[140px] lg:pb-28">
       {/* organic orange field */}
-<motion.div
+      <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1.2, ease: "easeOut" }}
@@ -66,7 +68,7 @@ export default function Hero() {
           {/* left: copy */}
           <div className="relative z-10 max-w-[520px]">
             <motion.p variants={fadeUp} initial="hidden" animate="show" custom={0} className="eyebrow mb-6">
-              Earned wage access
+              {t.landing.eyebrow}
             </motion.p>
 
             <motion.h1
@@ -80,7 +82,7 @@ export default function Hero() {
               <br />
               When you&apos;ve
               <br />
-              <span className="font-serif italic font-medium text-green-deep">earned it.</span>
+              <span className="font-serif italic font-medium text-orange">earned it.</span>
             </motion.h1>
 
             <motion.p
@@ -90,7 +92,7 @@ export default function Hero() {
               custom={0.22}
               className="mt-8 text-[16px] sm:text-[17px] leading-[1.7] text-ink-soft max-w-[400px]"
             >
-              Access money you have already earned, and understand how much to actually take — not just how much you can.
+              {t.landing.heroSubtitleLanding}
             </motion.p>
 
             <motion.div
@@ -101,10 +103,10 @@ export default function Hero() {
               className="mt-10 flex flex-wrap items-center gap-4"
             >
               <a href="/signup" className="btn-primary">
-                Request a demo <ArrowRight size={16} className="btn-arrow" />
+                {t.ctaPrimary} <ArrowRight size={16} className="btn-arrow" />
               </a>
               <a href="#how-it-works" className="btn-secondary">
-                See how it works
+                {t.ctaLearnMore}
               </a>
             </motion.div>
 
@@ -188,10 +190,10 @@ export default function Hero() {
               transition={{ opacity: { duration: 0.6, delay: 0.85 }, ...floatY(5.2, 1.7).transition }}
                 className="hidden lg:block absolute z-20 right-0 top-[68%] w-[230px] xl:top-[16%] xl:-right-[56px] xl:w-[180px]"
             >
-              <FloatingInsightCard className="bg-green-soft border-green/20">
+              <FloatingInsightCard className="bg-orange-soft border-orange/20">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Lightbulb size={13} className="text-green-deep" />
-                  <p className="text-[11px] font-semibold text-green-deep">ARQAU recommendation</p>
+                  <Lightbulb size={13} className="text-orange" />
+                  <p className="text-[11px] font-semibold text-orange">ARQAU recommendation</p>
                 </div>
                 <p className="text-[12px] leading-snug text-ink-soft mb-2">
                   ARQAU considers your earned income, upcoming expenses and reserve target before suggesting an amount.
@@ -214,7 +216,7 @@ export default function Hero() {
                 <p className="text-[11.5px] text-ink-soft leading-snug mb-2.5">
                   Try different scenarios and see how they affect your balance.
                 </p>
-                <span className="text-[12px] font-semibold text-green-deep">Open simulator →</span>
+                <span className="text-[12px] font-semibold text-orange">Open simulator →</span>
               </FloatingInsightCard>
             </motion.div>
 

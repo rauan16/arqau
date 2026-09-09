@@ -3,12 +3,14 @@
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { useTranslation } from "@/lib/language-context";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function FinalCTA() {
+  const { t } = useTranslation();
   return (
-    <section id="final-cta" className="relative overflow-hidden bg-green-deep text-cream py-32 lg:py-44">
+    <section id="final-cta" className="relative overflow-hidden bg-orange text-cream py-32 lg:py-44">
       <div className="pointer-events-none absolute inset-0">
         <Image
           src="/Kazakhstan1-e1496914203779.jpg"
@@ -30,7 +32,7 @@ export default function FinalCTA() {
             transition={{ duration: 0.5, ease: easeOut }}
             className="text-[12px] font-bold tracking-[0.1em] uppercase text-cream/70 mb-6"
           >
-            The future of financial wellbeing
+            {t.landing.finalCTAEyebrow}
           </motion.p>
 
           <motion.h2
@@ -40,9 +42,9 @@ export default function FinalCTA() {
             transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
             className="text-[40px] sm:text-[54px] lg:text-[68px] font-serif font-medium leading-[1.02] tracking-[-0.025em] text-balance"
           >
-            Better decisions today.
+            {t.landing.finalCTATitle}
             <br />
-            More freedom tomorrow.
+            {t.landing.finalCTASubtitle}
           </motion.h2>
 
           <motion.p
@@ -64,10 +66,10 @@ export default function FinalCTA() {
           className="flex flex-col sm:flex-row lg:flex-col items-start gap-4"
         >
           <a href="/signup" className="inline-flex items-center gap-2 bg-cream text-ink px-6 py-3.5 rounded-[10px] font-semibold text-[15px] hover:bg-white transition-colors">
-            Get started <ArrowRight size={16} />
+            {t.ctaGetStarted} <ArrowRight size={16} />
           </a>
           <a href="#how-it-works" className="inline-flex items-center gap-2 text-cream font-semibold text-[15px] border-b border-cream/40 pb-0.5 hover:border-cream transition-colors">
-            See how it works
+            {t.ctaLearnMore}
           </a>
         </motion.div>
       </div>

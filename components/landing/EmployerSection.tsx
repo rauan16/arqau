@@ -2,10 +2,12 @@
 
 import { motion } from "framer-motion";
 import { employerDemo, formatTenge } from "@/lib/demoData";
+import { useTranslation } from "@/lib/language-context";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
 export default function EmployerSection() {
+  const { t } = useTranslation();
   const max = Math.max(...employerDemo.weeklyActivity);
   return (
     <section id="employers" className="py-32 lg:py-40 bg-cream-soft">
@@ -18,7 +20,7 @@ export default function EmployerSection() {
             transition={{ duration: 0.5, ease: easeOut }}
             className="eyebrow mb-5 reveal-text"
           >
-            For employers
+            {t.landing.employerEyebrow}
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -44,7 +46,7 @@ export default function EmployerSection() {
             viewport={{ once: true, margin: "-100px" }}
             transition={{ duration: 0.6, delay: 0.2, ease: easeOut }}
           >
-            <a href="/business/register" className="btn-primary">Register your business →</a>
+            <a href="/business/register" className="btn-primary">{t.landing.employerCta} →</a>
           </motion.div>
         </div>
 
@@ -64,15 +66,15 @@ export default function EmployerSection() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-7 mb-12">
             <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">Employees</p>
+              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.employees}</p>
               <p className="text-[28px] font-bold tracking-tight">{employerDemo.employees.toLocaleString("en-US")}</p>
             </div>
             <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">Earned payroll</p>
+              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.earnedPayroll}</p>
               <p className="text-[28px] font-bold tracking-tight">{formatTenge(employerDemo.earnedPayroll)}</p>
             </div>
             <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">Active this month</p>
+              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.activeThisMonth}</p>
               <p className="text-[28px] font-bold tracking-tight">{employerDemo.activeThisMonth.toLocaleString("en-US")}</p>
             </div>
             <div>
@@ -87,7 +89,7 @@ export default function EmployerSection() {
             ))}
           </div>
           <p className="text-[11.5px] text-cream/40 mt-4">
-            Fictional demo values used to illustrate the employer view.
+            {t.landing.employerIllustrative}
           </p>
         </motion.div>
       </div>

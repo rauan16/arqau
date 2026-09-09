@@ -11,7 +11,7 @@ export default function HeroScreen() {
         <CircleUserRound size={21} className="text-ink-soft" strokeWidth={1.7} />
       </div>
 
-      <p className="text-[13px] text-ink-soft mb-1">Good morning, {scenario.employeeName} <span className="text-green-deep">✦</span></p>
+      <p className="text-[13px] text-ink-soft mb-1">Good morning, {scenario.employeeName} <span className="text-orange">✦</span></p>
       <div className="flex items-center justify-between mb-4">
         <p className="text-[12px] text-ink-soft">Earned this month</p>
         <span className="text-[10px] text-ink-soft/70">This month →</span>
@@ -22,7 +22,7 @@ export default function HeroScreen() {
       </p>
 
       <div className="grid grid-cols-2 gap-2.5 mb-3">
-        <div className="rounded-[18px] bg-green-deep text-cream p-3.5">
+        <div className="rounded-[18px] bg-orange text-cream p-3.5">
           <p className="text-[10.5px] opacity-85 mb-1">Available</p>
           <p className="text-[19px] font-bold leading-tight numbers">{formatTenge(scenario.available)}</p>
         </div>

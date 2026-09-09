@@ -1,3 +1,7 @@
+"use client";
+
+import { useTranslation } from "@/lib/language-context";
+
 const columns = [
   { title: "Product", links: [{ label: "How it works", href: "#how-it-works" }, { label: "Features", href: "#features" }, { label: "Simulator", href: "#simulator" }] },
   { title: "For", links: [{ label: "Employees", href: "#top" }, { label: "Employers", href: "#employers" }, { label: "AI assistant", href: "#ai-assistant" }] },
@@ -6,6 +10,7 @@ const columns = [
 ];
 
 export default function Footer() {
+  const { t } = useTranslation();
   return (
     <footer className="bg-cream border-t border-ink/[0.08] pt-16 pb-10">
       <div className="container-arqau">
@@ -13,7 +18,7 @@ export default function Footer() {
           <div>
             <p className="text-[19px] font-extrabold tracking-[0.08em] mb-3">ARQAU</p>
             <p className="text-[14px] text-ink-soft max-w-[220px] leading-relaxed">
-              Financial intelligence for earned income.
+              {t.landing.footerTagline}
             </p>
             <div className="flex items-center gap-3 mt-6">
               <a href="mailto:hello@arqau.example" aria-label="Email ARQAU" className="w-9 h-9 rounded-full border border-ink/[0.12] flex items-center justify-center text-ink-soft hover:text-ink hover:border-ink/30 transition-colors focus-ring">
@@ -37,7 +42,7 @@ export default function Footer() {
               <ul className="space-y-3">
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <a href={l.href} className="text-[14px] text-ink hover:text-green-deep transition-colors focus-ring">
+                    <a href={l.href} className="text-[14px] text-ink hover:text-orange transition-colors focus-ring">
                       {l.label}
                     </a>
                   </li>
@@ -48,7 +53,7 @@ export default function Footer() {
         </div>
 
         <div className="pt-8 border-t border-ink/[0.08] text-[13px] text-ink-soft/70">
-          © 2026 ARQAU. Demo concept.
+          {t.footerRights}
         </div>
       </div>
     </footer>

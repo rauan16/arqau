@@ -23,7 +23,7 @@ export function EarningsScreen() {
         </div>
         <div className="flex justify-between text-[11px] pt-2 border-t border-ink/[0.07]">
           <span className="text-ink-soft">Available</span>
-          <span className="font-semibold text-green-deep numbers">{formatTenge(scenario.available)}</span>
+          <span className="font-semibold text-orange numbers">{formatTenge(scenario.available)}</span>
         </div>
       </div>
     </div>
@@ -43,8 +43,8 @@ export function ExpensesScreen() {
           </div>
         ))}
       </div>
-      <div className="mt-auto rounded-xl bg-green-soft p-3">
-        <p className="text-[10.5px] text-green-deep font-medium leading-snug">
+      <div className="mt-auto rounded-xl bg-orange-soft p-3">
+        <p className="text-[10.5px] text-orange font-medium leading-snug">
           Your planned expenses are covered.
         </p>
       </div>
@@ -61,10 +61,10 @@ export function RecommendationScreen() {
       <p className="text-[11px] text-ink-soft leading-snug mb-4">
         This amount keeps your upcoming expenses covered while maintaining a {formatTenge(scenario.reserveTarget)} reserve.
       </p>
-      <span className="inline-block w-fit text-[10px] font-semibold text-green-deep bg-green-soft px-2.5 py-1 rounded-full mb-4">
+      <span className="inline-block w-fit text-[10px] font-semibold text-orange bg-orange-soft px-2.5 py-1 rounded-full mb-4">
         Recommended
       </span>
-      <div className="mt-auto flex items-center gap-1 text-[11.5px] font-semibold text-green-deep">
+      <div className="mt-auto flex items-center gap-1 text-[11.5px] font-semibold text-orange">
         See why <ArrowRight size={13} />
       </div>
     </div>
@@ -79,8 +79,8 @@ export function WhatIfScreen() {
       <p className="text-[11px] text-ink-soft mb-3">How much would you like to withdraw?</p>
       <div className="mb-3">
         <div className="h-1.5 rounded-full bg-ink/[0.08] relative">
-          <div className="h-1.5 rounded-full bg-green-deep" style={{ width: "67%" }} />
-          <div className="absolute -top-1 w-3.5 h-3.5 rounded-full bg-green-deep border-2 border-white shadow" style={{ left: "63%" }} />
+          <div className="h-1.5 rounded-full bg-orange" style={{ width: "67%" }} />
+          <div className="absolute -top-1 w-3.5 h-3.5 rounded-full bg-orange border-2 border-white shadow" style={{ left: "63%" }} />
         </div>
         <div className="flex justify-between text-[9px] text-ink-soft/60 mt-1">
           <span>0 ₸</span>
@@ -92,7 +92,7 @@ export function WhatIfScreen() {
         {result.label}
       </span>
       <p className="text-[10.5px] text-ink-soft leading-snug mb-4">{result.note}</p>
-      <div className="mt-auto flex items-center gap-1 text-[11.5px] font-semibold text-green-deep">
+      <div className="mt-auto flex items-center gap-1 text-[11.5px] font-semibold text-orange">
         Compare scenarios <ArrowRight size={13} />
       </div>
     </div>
@@ -103,20 +103,20 @@ export function AIScreen() {
   return (
     <div className={base}>
       <div className="flex items-center gap-1.5 mb-3">
-        <MessageCircle size={13} className="text-green-deep" />
+        <MessageCircle size={13} className="text-orange" />
         <p className="text-[11px] font-bold text-ink-soft">AI Assistant</p>
       </div>
       <div className="space-y-2.5 text-[10.5px] leading-snug">
         <div className="ml-auto max-w-[85%] bg-ink text-cream rounded-xl rounded-tr-sm px-3 py-2">
           What happens if I withdraw 80,000 ₸?
         </div>
-        <div className="mr-auto max-w-[90%] bg-green-soft rounded-xl rounded-tl-sm px-3 py-2">
+        <div className="mr-auto max-w-[90%] bg-orange-soft rounded-xl rounded-tl-sm px-3 py-2">
           You can, but your reserve would fall below the recommended level.
         </div>
         <div className="ml-auto max-w-[85%] bg-ink text-cream rounded-xl rounded-tr-sm px-3 py-2">
           What amount would be safer?
         </div>
-        <div className="mr-auto max-w-[90%] bg-green-soft rounded-xl rounded-tl-sm px-3 py-2">
+        <div className="mr-auto max-w-[90%] bg-orange-soft rounded-xl rounded-tl-sm px-3 py-2">
           50,000 ₸ keeps expenses covered and your reserve intact.
         </div>
       </div>
