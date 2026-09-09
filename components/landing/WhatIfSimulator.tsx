@@ -6,8 +6,8 @@ import { scenario, evaluateWithdrawal, formatTenge } from "@/lib/demoData";
 import { useTranslation } from "@/lib/language-context";
 
 const statusStyles: Record<string, { bg: string; text: string; bar: string }> = {
-  comfortable: { bg: "bg-orange-soft", text: "text-orange", bar: "bg-green-bright" },
-  caution: { bg: "bg-orange-soft/60", text: "text-orange", bar: "bg-green" },
+  comfortable: { bg: "bg-orange-soft", text: "text-orange", bar: "bg-orange-2" },
+  caution: { bg: "bg-orange-soft/60", text: "text-orange", bar: "bg-orange" },
   "high-risk": { bg: "bg-red-50", text: "text-red-700", bar: "bg-red-500" },
 };
 
@@ -84,9 +84,9 @@ export default function WhatIfSimulator() {
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
               aria-label="Withdrawal amount"
-              className="w-full h-3 rounded-full appearance-none bg-ink/[0.08] accent-green-deep focus-ring mb-3"
+              className="w-full h-3 rounded-full appearance-none bg-ink/[0.08] accent-orange focus-ring mb-3"
               style={{
-                background: `linear-gradient(to right, var(--green-deep) ${pct}%, rgba(21,21,21,0.08) ${pct}%)`,
+                background: `linear-gradient(to right, var(--orange) ${pct}%, rgba(21,21,21,0.08) ${pct}%)`,
               }}
             />
             <div className="flex justify-between text-[12px] text-ink-soft/60 mb-10">

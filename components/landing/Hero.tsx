@@ -60,7 +60,7 @@ export default function Hero() {
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="lg:hidden absolute left-[-25%] right-[-25%] top-[48%] bottom-[-10%] rounded-t-[48%] bg-green-2" />
+              <div className="lg:hidden absolute left-[-25%] right-[-25%] top-[48%] bottom-[-10%] rounded-t-[48%] bg-orange-2" />
             </motion.div>
 
       <div className="relative z-10 max-w-[1480px] mx-auto pl-6 pr-6 lg:pl-[72px] lg:pr-[72px]">
@@ -148,7 +148,7 @@ export default function Hero() {
                 <p className="text-[19px] font-bold mb-2.5 numbers">{formatTenge(scenario.earned)}</p>
                 <div className="flex items-end gap-[3px] h-7">
                   {weeklyEarnings.map((v, i) => (
-                    <div key={i} className="w-[7px] rounded-full bg-green-bright" style={{ height: `${(v / maxEarn) * 100}%` }} />
+                    <div key={i} className="w-[7px] rounded-full bg-orange-2" style={{ height: `${(v / maxEarn) * 100}%` }} />
                   ))}
                 </div>
                 <p className="mt-1.5 text-[9px] text-ink-soft/50">Illustrative example</p>
@@ -228,7 +228,7 @@ export default function Hero() {
             >
               <FloatingInsightCard>
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <ShieldCheck size={13} className="text-green" />
+                  <ShieldCheck size={13} className="text-orange" />
                   <p className="text-[11px] font-semibold">Reserve target</p>
                 </div>
                 <p className="text-[10.5px] text-ink-soft mb-1">Amount ARQAU recommends keeping</p>

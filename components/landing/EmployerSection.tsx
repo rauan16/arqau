@@ -85,7 +85,7 @@ export default function EmployerSection() {
 
           <div className="flex items-end gap-3 h-28 border-t border-cream/10 pt-7">
             {employerDemo.weeklyActivity.map((v, i) => (
-              <div key={i} className="flex-1 rounded-t-md bg-green-bright" style={{ height: `${(v / max) * 100}%` }} />
+              <div key={i} className="flex-1 rounded-t-md bg-orange-2" style={{ height: `${(v / max) * 100}%` }} />
             ))}
           </div>
           <p className="text-[11.5px] text-cream/40 mt-4">

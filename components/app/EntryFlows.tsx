@@ -43,7 +43,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           <div className="hidden bg-ink p-12 text-cream lg:block">
             <Link href="/" className="text-[20px] font-extrabold tracking-[0.08em]">ARQAU</Link>
             <div className="mt-32 max-w-[360px]">
-              <p className="eyebrow text-green-2">A clearer financial decision</p>
+              <p className="eyebrow text-orange-2">A clearer financial decision</p>
               <h1 className="mt-5 text-[52px] font-extrabold leading-[0.98] tracking-[-0.04em]">Earned income, in context.</h1>
               <p className="mt-6 text-[16px] leading-relaxed text-cream/65">Your salary, expenses and reserve in one calm workspace.</p>
             </div>
@@ -131,7 +131,7 @@ export function OnboardingPage() {
     return (
       <main className="min-h-screen bg-cream px-5 py-8 sm:px-8">
         <div className="mx-auto max-w-[480px] text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green text-cream">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-orange text-cream">
             <Check />
           </div>
           <p className="eyebrow mt-8">Your workspace is ready</p>
@@ -230,7 +230,7 @@ export function BusinessRegistration() {
     return (
       <main className="min-h-screen bg-cream px-5 py-8 sm:px-8">
         <div className="mx-auto max-w-[520px] text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green text-cream">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-orange text-cream">
             <Check />
           </div>
           <p className="eyebrow mt-8">Application submitted</p>
@@ -266,7 +266,7 @@ export function BusinessRegistration() {
                   <span
                     className={`flex h-7 w-7 items-center justify-center rounded-full border ${
                       step > index + 1
-                        ? "border-orange bg-green text-cream"
+                        ? "border-orange bg-orange text-cream"
                         : step === index + 1
                         ? "border-orange-deep bg-orange text-cream"
                         : "border-ink/15"

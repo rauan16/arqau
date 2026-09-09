@@ -26,8 +26,8 @@ export default function AIAssistant() {
             transition={{ duration: 0.5, ease: easeOut }}
             className="flex items-center gap-2 mb-5"
           >
-            <Sparkles size={16} className="text-green-bright" />
-            <p className="text-[14px] font-semibold tracking-wide text-green-bright reveal-text">{t.landing.aiEyebrow}</p>
+            <Sparkles size={16} className="text-orange-2" />
+            <p className="text-[14px] font-semibold tracking-wide text-orange-2 reveal-text">{t.landing.aiEyebrow}</p>
           </motion.div>
           <motion.h2
             initial={{ opacity: 0, y: 16 }}
@@ -70,7 +70,7 @@ export default function AIAssistant() {
               <p className="text-[11px] tracking-[0.12em] uppercase text-cream/45">Context-aware guidance</p>
               <p className="text-[15px] font-semibold mt-1">Your ARQAU conversation</p>
             </div>
-            <Sparkles size={18} className="text-green-bright" />
+            <Sparkles size={18} className="text-orange-2" />
           </div>
           <div className="space-y-5">
             {messages.map((m, i) => (

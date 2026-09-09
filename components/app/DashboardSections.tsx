@@ -162,7 +162,7 @@ export function FinancePage() {
                   <p className="font-semibold">{item.merchant || item.category || item.type}</p>
                   <p className="text-ink-soft">{item.date ? new Date(item.date).toLocaleDateString() : ""}</p>
                 </div>
-                <span className={`font-bold numbers ${item.type === "income" ? "text-green" : "text-orange-dark"}`}>
+                <span className={`font-bold numbers ${item.type === "income" ? "text-orange" : "text-orange-dark"}`}>
                   {item.type === "income" ? "+" : "-"}{formatTenge(item.amount_minor)} ₸
                 </span>
               </div>
@@ -318,7 +318,7 @@ export function AIPage() {
           <div className="mt-4 space-y-3 rounded-[12px] border border-ink/[0.08] bg-cream p-4">
             <div className="flex items-center justify-between">
               <span className="text-[13px] text-ink-soft">{t.ai.riskLevel}</span>
-              <span className={`text-[13px] font-bold ${analysis.risk_level === "low" ? "text-green" : analysis.risk_level === "medium" ? "text-yellow-600" : "text-red-600"}`}>
+              <span className={`text-[13px] font-bold ${analysis.risk_level === "low" ? "text-orange" : analysis.risk_level === "medium" ? "text-yellow-600" : "text-red-600"}`}>
                 {analysis.risk_level.toUpperCase()}
               </span>
             </div>
@@ -346,7 +346,7 @@ export function AIPage() {
         <p className="mt-2 text-[12px] text-ink-soft">Tap a question to ask ARQAU</p>
         <div className="mt-4 space-y-2">
           {contextualPrompts.map((prompt) => (
-            <button key={prompt} onClick={() => { setMessage(prompt); }} className="w-full rounded-[10px] border border-orange/20 bg-cream px-3 py-2.5 text-left text-[13px] font-semibold text-orange transition-colors hover:bg-green hover:text-cream">
+            <button key={prompt} onClick={() => { setMessage(prompt); }} className="w-full rounded-[10px] border border-orange/20 bg-cream px-3 py-2.5 text-left text-[13px] font-semibold text-orange transition-colors hover:bg-orange hover:text-cream">
               {prompt}
             </button>
           ))}
@@ -522,7 +522,7 @@ export function GetMoneyPage() {
                 <p className="text-[12px] text-ink-soft">{new Date(req.created_at).toLocaleDateString()}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${
-                req.status === "approved" ? "bg-green/20 text-green" :
+                req.status === "approved" ? "bg-green/20 text-orange" :
                 req.status === "pending" ? "bg-yellow-100 text-yellow-700" :
                 req.status === "rejected" ? "bg-red-100 text-red-600" :
                 "bg-ink/10 text-ink-soft"
@@ -630,7 +630,7 @@ export function HistoryPage() {
                     <td className="py-4 text-ink-soft">{item.category}</td>
                     <td className="py-4 text-ink-soft">{item.date}</td>
                     <td className="py-4 text-ink-soft capitalize">{item.type}</td>
-                    <td className={`py-4 text-right font-bold numbers ${item.type === "income" ? "text-green" : "text-orange-dark"}`}>
+                    <td className={`py-4 text-right font-bold numbers ${item.type === "income" ? "text-orange" : "text-orange-dark"}`}>
                       {item.type === "income" ? "+" : "-"}{formatTenge(item.amount)} ₸
                     </td>
                   </tr>
@@ -672,7 +672,7 @@ export function SettingsPage() {
               <p className="text-[13px] font-semibold">{user?.is_verified ? t.settings.active : t.settings.pending}</p>
               <p className="text-[12px] text-ink-soft">{t.settings.verificationStatus}</p>
             </div>
-            <span className={`text-[11px] font-semibold ${user?.is_verified ? "text-green" : "text-orange-dark"}`}>{user?.is_verified ? t.settings.active : t.settings.pending}</span>
+            <span className={`text-[11px] font-semibold ${user?.is_verified ? "text-orange" : "text-orange-dark"}`}>{user?.is_verified ? t.settings.active : t.settings.pending}</span>
           </div>
         </div>
       </section>

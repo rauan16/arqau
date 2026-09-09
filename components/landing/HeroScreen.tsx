@@ -41,7 +41,7 @@ export default function HeroScreen() {
           {weeklyEarnings.map((v, i) => (
             <div
               key={i}
-              className="w-[6px] rounded-full bg-green-bright/70"
+              className="w-[6px] rounded-full bg-orange-2/70"
               style={{ height: `${(v / max) * 100}%` }}
             />
           ))}
@@ -50,14 +50,14 @@ export default function HeroScreen() {
 
       <div className="rounded-[18px] bg-ink text-cream p-4 mt-auto mb-4">
         <div className="flex items-center gap-1.5 mb-1.5">
-          <Sparkles size={13} className="text-green-bright" />
-          <p className="text-[10.5px] font-semibold text-green-bright">ARQAU recommends</p>
+          <Sparkles size={13} className="text-orange-2" />
+          <p className="text-[10.5px] font-semibold text-orange-2">ARQAU recommends</p>
         </div>
         <p className="text-[19px] font-bold mb-1.5 numbers">{formatTenge(scenario.recommended)}</p>
         <p className="text-[11.5px] text-cream/70 leading-snug mb-3">
           Keeps your upcoming expenses covered while protecting your reserve target.
         </p>
-        <div className="flex items-center gap-1 text-[12px] font-semibold text-green-bright">
+        <div className="flex items-center gap-1 text-[12px] font-semibold text-orange-2">
           View recommendation <ArrowRight size={13} />
         </div>
       </div>

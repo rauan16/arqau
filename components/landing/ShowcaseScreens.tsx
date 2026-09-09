@@ -13,7 +13,7 @@ export function EarningsScreen() {
       <p className="text-[10.5px] text-ink-soft mb-4">Earned so far</p>
       <div className="flex items-end gap-[3px] h-12 mb-4">
         {weeklyEarnings.map((v, i) => (
-          <div key={i} className="w-[7px] rounded-full bg-green-bright/70" style={{ height: `${(v / max) * 100}%` }} />
+          <div key={i} className="w-[7px] rounded-full bg-orange-2/70" style={{ height: `${(v / max) * 100}%` }} />
         ))}
       </div>
       <div className="space-y-2 mt-auto">
