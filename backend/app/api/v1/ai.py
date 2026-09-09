@@ -6,7 +6,9 @@ from app.models import User, Transaction, EarnedWages
 from app.schemas.ai import WithdrawalAnalysis, ChatRequest, ChatResponse
 from app.services.ai_service import analyze_withdrawal, chat_with_user
 from app.api.v1.auth import get_current_user
+from app.config import get_settings
 
+settings = get_settings()
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
@@ -58,6 +60,12 @@ async def analyze_withdrawal_endpoint(
         "total_expenses": total_expenses,
         "net_balance": net_balance,
     }
+
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is not configured. Please contact support.",
+        )
 
     try:
         result = await analyze_withdrawal(financial_context)
@@ -113,6 +121,12 @@ async def chat_endpoint(
         "total_expenses": total_expenses,
         "net_balance": net_balance,
     }
+
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI service is not configured. Please contact support.",
+        )
 
     try:
         result = await chat_with_user(request.message, financial_context)

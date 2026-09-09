@@ -8,6 +8,18 @@ client = OpenAI(api_key=settings.openai_api_key)
 
 
 def build_withdrawal_prompt(ctx: dict) -> str:
+    has_data = any([
+        ctx.get("earned_amount", 0) > 0,
+        ctx.get("total_income", 0) > 0,
+        ctx.get("total_expenses", 0) > 0,
+    ])
+    empty_profile_warning = ""
+    if not has_data:
+        empty_profile_warning = """
+IMPORTANT: The user has no financial data yet (no earned wages, no income, no expenses recorded).
+You MUST NOT invent any figures. In your response, state that you don't have enough data to give a personalized recommendation and ask the user to set their earned wages, record income/expenses, and share their payday date.
+"""
+
     return f"""You are a financial assistant for ARQAU, an earned wage access app. You must ONLY interpret the provided financial context. Do NOT invent, estimate, or guess any financial figures (salary, balance, earned wages, transactions, expenses, debts, future income, or guarantees).
 
 Financial context:
@@ -18,7 +30,7 @@ Financial context:
 - Total income: {ctx.get('total_income', 0):,} ₸
 - Total expenses: {ctx.get('total_expenses', 0):,} ₸
 - Net balance: {ctx.get('net_balance', 0):,} ₸
-
+{empty_profile_warning}
 Rules:
 1. Base your analysis ONLY on the numbers above.
 2. Determine risk_level as low/medium/high based on whether the withdrawal leaves the user with enough for upcoming obligations relative to available amount.
@@ -31,6 +43,21 @@ Return ONLY valid JSON with keys: risk_level, recommendation, reserve_status, ex
 
 
 def build_chat_prompt(message: str, ctx: dict) -> str:
+    has_data = any([
+        ctx.get("earned_amount", 0) > 0,
+        ctx.get("total_income", 0) > 0,
+        ctx.get("total_expenses", 0) > 0,
+    ])
+    empty_profile_warning = ""
+    if not has_data:
+        empty_profile_warning = """
+IMPORTANT: The user has no financial data yet (no earned wages, no income, no expenses recorded).
+You MUST NOT invent any figures. Tell the user you don't have enough data yet and ask them to:
+1. Set their earned wages
+2. Record their income and upcoming expenses
+3. Share their payday date
+"""
+
     return f"""You are a financial assistant for ARQAU. You must ONLY interpret the provided financial context. Do NOT invent, estimate, or guess any financial figures.
 
 Financial context:
@@ -40,7 +67,7 @@ Financial context:
 - Total income: {ctx.get('total_income', 0):,} ₸
 - Total expenses: {ctx.get('total_expenses', 0):,} ₸
 - Net balance: {ctx.get('net_balance', 0):,} ₸
-
+{empty_profile_warning}
 User message: {message}
 
 Rules:

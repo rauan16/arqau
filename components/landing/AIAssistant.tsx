@@ -89,7 +89,7 @@ export default function AIAssistant() {
             ))}
           </div>
           <p className="mt-5 text-[11px] text-cream/35">
-            Illustrative example — live AI is not connected yet. Responses below are product concept examples.
+            Illustrative example — try the live AI assistant in your dashboard after signing in.
           </p>
         </motion.div>
       </div>

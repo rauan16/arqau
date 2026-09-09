@@ -182,6 +182,7 @@ export function AIPage() {
   const [chatHistory, setChatHistory] = useState<Array<{ from: "you" | "arqau"; text: string }>>([]);
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatDisabled, setChatDisabled] = useState(false);
 
   async function loadEarned() {
     try {
@@ -220,12 +221,13 @@ export function AIPage() {
 
   async function handleChat(e: React.FormEvent) {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!message.trim() || sending) return;
     const userMsg = message.trim();
     setMessage("");
     setChatHistory((h) => [...h, { from: "you", text: userMsg }]);
     setSending(true);
     setChatError("");
+    setChatDisabled(true);
     try {
       const result = await api.ai.chat(userMsg);
       setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
@@ -235,6 +237,25 @@ export function AIPage() {
       setChatHistory((h) => h.slice(0, -1));
     } finally {
       setSending(false);
+      setChatDisabled(false);
+    }
+  }
+
+  async function handleRetryChat() {
+    if (!message.trim() || sending) return;
+    setChatError("");
+    setSending(true);
+    setChatDisabled(true);
+    try {
+      const result = await api.ai.chat(message.trim());
+      setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
+      setMessage("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Chat failed";
+      setChatError(msg);
+    } finally {
+      setSending(false);
+      setChatDisabled(false);
     }
   }
 
@@ -303,8 +324,11 @@ export function AIPage() {
     <section className={`${panel} mt-5 max-w-[760px]`}>
       <h2 className="mb-4 text-[16px] font-bold">Ask about your finances</h2>
       {chatError && (
-        <div className="mb-3 rounded-[10px] border border-yellow-200 bg-yellow-50 px-4 py-3 text-[13px] text-yellow-800">
-          AI assistant is currently unavailable in this prototype. Withdrawal analysis is still available above.
+        <div className="mb-3 rounded-[10px] border border-yellow-200 bg-yellow-50 px-4 py-3 text-[13px] text-yellow-800 flex items-center justify-between gap-3">
+          <span>AI assistant is temporarily unavailable. Withdrawal analysis is still available above.</span>
+          <button onClick={handleRetryChat} disabled={sending || chatDisabled || !message.trim()} className="shrink-0 rounded-[8px] border border-yellow-300 bg-yellow-100 px-3 py-1.5 text-[12px] font-bold text-yellow-900 transition-colors hover:bg-yellow-200 disabled:opacity-50">
+            Retry
+          </button>
         </div>
       )}
       <div className="max-h-[300px] space-y-3 overflow-y-auto">
@@ -318,8 +342,8 @@ export function AIPage() {
         ))}
       </div>
       <form className="mt-4 flex gap-2 border-t border-ink/[0.08] pt-4" onSubmit={handleChat}>
-        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your finances..." className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange" disabled={sending} />
-        <button className="btn-primary px-4" type="submit" disabled={sending || !message.trim()}>
+        <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about your finances..." className="min-w-0 flex-1 rounded-[10px] border border-ink/[0.1] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange" disabled={sending || chatDisabled} />
+        <button className="btn-primary px-4" type="submit" disabled={sending || chatDisabled || !message.trim()}>
           {sending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
         </button>
       </form>

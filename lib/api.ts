@@ -119,7 +119,8 @@ function clearToken() {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries = 1
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -130,28 +131,42 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers,
+      });
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      clearToken();
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearToken();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+        }
+        const body = await response.json().catch(() => ({}));
+        const detail = body?.detail || body?.message || `HTTP ${response.status}`;
+        throw new ApiError(detail, response.status);
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return response.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < retries && !(lastError instanceof ApiError)) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      } else {
+        break;
       }
     }
-    const body = await response.json().catch(() => ({}));
-    const detail = body?.detail || body?.message || `HTTP ${response.status}`;
-    throw new ApiError(detail, response.status);
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json();
+  throw lastError || new Error("Request failed");
 }
 
 export const api = {
