@@ -161,14 +161,50 @@ async def analyze_withdrawal(ctx: dict) -> dict:
         raise RuntimeError("AI_QUOTA_EXCEEDED")
     except APIStatusError as e:
         _safe_log_error("analyze_withdrawal", e, status_code=e.status_code)
+        _log_provider_diagnostic("analyze_withdrawal", e)
         if e.status_code == 429:
             raise RuntimeError("AI_QUOTA_EXCEEDED")
         if e.status_code in (401, 403):
             raise RuntimeError("AI_AUTH_FAILED")
+        if e.status_code == 402:
+            raise RuntimeError("AI_CREDITS_EXCEEDED")
         raise RuntimeError(f"AI_HTTP_{e.status_code}")
     except Exception as e:
         _safe_log_error("analyze_withdrawal", e)
         raise RuntimeError("AI_UNKNOWN_ERROR")
+
+
+def _log_provider_diagnostic(context: str, exc: APIStatusError):
+    """Log only safe provider diagnostics: status code, model, and a scrubbed
+    response body. Never logs the API key or Authorization header."""
+    body = ""
+    try:
+        raw = getattr(exc, "response", None)
+        if raw is not None:
+            body = getattr(raw, "text", "") or ""
+    except Exception:
+        body = ""
+    scrubbed = _scrub_secrets(body)
+    logger.error(
+        "PROVIDER_DIAG context=%s provider=%s model=%s http_status=%s response_body=%s",
+        context,
+        PROVIDER,
+        settings.openai_model,
+        exc.status_code,
+        scrubbed[:500],
+    )
+
+
+def _scrub_secrets(text: str) -> str:
+    """Remove anything that could be an API key or auth header value."""
+    import re
+    if not text:
+        return ""
+    text = re.sub(r"(?i)(sk-or-[A-Za-z0-9_\-]+)", "[REDACTED_KEY]", text)
+    text = re.sub(r"(?i)(sk-[A-Za-z0-9_\-]+)", "[REDACTED_KEY]", text)
+    text = re.sub(r"(?i)(authorization[\"'\s:=]+)[^\s,}}\"]+", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)(api[_-]?key[\"'\s:=]+)[^\s,}}\"]+", r"\1[REDACTED]", text)
+    return text
 
 
 async def chat_with_user(message: str, ctx: dict) -> dict:
@@ -199,10 +235,13 @@ async def chat_with_user(message: str, ctx: dict) -> dict:
         raise RuntimeError("AI_QUOTA_EXCEEDED")
     except APIStatusError as e:
         _safe_log_error("chat", e, status_code=e.status_code)
+        _log_provider_diagnostic("chat", e)
         if e.status_code == 429:
             raise RuntimeError("AI_QUOTA_EXCEEDED")
         if e.status_code in (401, 403):
             raise RuntimeError("AI_AUTH_FAILED")
+        if e.status_code == 402:
+            raise RuntimeError("AI_CREDITS_EXCEEDED")
         raise RuntimeError(f"AI_HTTP_{e.status_code}")
     except Exception as e:
         _safe_log_error("chat", e)

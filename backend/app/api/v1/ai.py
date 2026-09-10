@@ -12,6 +12,88 @@ settings = get_settings()
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+@router.get("/diagnostic")
+async def ai_diagnostic():
+    """TEMPORARY diagnostic endpoint.
+
+    Returns the exact provider error so the root cause of AI failures can be
+    determined. Never returns the API key or Authorization header.
+    """
+    from openai import OpenAI, APIStatusError, RateLimitError
+    import re as _re
+
+    key_present = bool(settings.openai_api_key)
+    result = {
+        "openai_api_key_present": key_present,
+        "openai_model": settings.openai_model,
+        "base_url": "https://openrouter.ai/api/v1" if (settings.openai_api_key or "").startswith("sk-or-") else "default",
+    }
+    if not key_present:
+        result["status"] = "no_key"
+        return result
+
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        base_url="https://openrouter.ai/api/v1" if (settings.openai_api_key or "").startswith("sk-or-") else None,
+        timeout=30.0,
+    )
+    try:
+        completion = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": "Reply with exactly: diagnostic-ok"}],
+            max_tokens=10,
+        )
+        result["status"] = "ok"
+        result["provider_response"] = (completion.choices[0].message.content.strip() if completion.choices else "empty")
+        return result
+    except RateLimitError as e:
+        result["status"] = "error"
+        result["http_status"] = 429
+        result["error_category"] = "rate_limit"
+        result["error_code"] = "rate_limit"
+        result["error_message"] = _scrub(str(e))
+        result["response_body"] = _scrub(getattr(getattr(e, "response", None), "text", "") or "")
+        return result
+    except APIStatusError as e:
+        result["status"] = "error"
+        result["http_status"] = e.status_code
+        result["error_code"] = getattr(e, "code", None) or "unknown"
+        body = getattr(getattr(e, "response", None), "text", "") or ""
+        result["error_message"] = _scrub(str(e))
+        result["response_body"] = _scrub(body)
+        if e.status_code == 429:
+            result["error_category"] = "rate_limit"
+        elif e.status_code == 402:
+            result["error_category"] = "credits_payment_quota"
+        elif e.status_code in (401, 403):
+            result["error_category"] = "authentication"
+        elif e.status_code == 400:
+            result["error_category"] = "bad_request_model_parameters"
+        elif 500 <= e.status_code < 600:
+            result["error_category"] = "provider_server_error"
+        else:
+            result["error_category"] = "other"
+        return result
+    except Exception as e:
+        result["status"] = "error"
+        result["http_status"] = None
+        result["error_category"] = "non_http_exception"
+        result["error_type"] = type(e).__name__
+        result["error_message"] = _scrub(str(e))
+        return result
+
+
+def _scrub(text):
+    """Remove any API key / auth header value from diagnostic output."""
+    if not text:
+        return ""
+    text = _re.sub(r"(?i)(sk-or-[A-Za-z0-9_\-]+)", "[REDACTED_KEY]", text)
+    text = _re.sub(r"(?i)(sk-[A-Za-z0-9_\-]+)", "[REDACTED_KEY]", text)
+    text = _re.sub(r"(?i)(authorization[\"'\s:=]+)[^\s,}}\"]+", r"\1[REDACTED]", text)
+    text = _re.sub(r"(?i)(api[_-]?key[\"'\s:=]+)[^\s,}}\"]+", r"\1[REDACTED]", text)
+    return text
+
+
 @router.post("/analyze-withdrawal", response_model=WithdrawalAnalysis)
 async def analyze_withdrawal_endpoint(
     request: dict,
@@ -73,6 +155,11 @@ async def analyze_withdrawal_endpoint(
     except RuntimeError as e:
         msg = str(e)
         if msg == "AI_QUOTA_EXCEEDED":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
+            )
+        if msg == "AI_CREDITS_EXCEEDED":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
@@ -150,6 +237,11 @@ async def chat_endpoint(
     except RuntimeError as e:
         msg = str(e)
         if msg == "AI_QUOTA_EXCEEDED":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
+            )
+        if msg == "AI_CREDITS_EXCEEDED":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
