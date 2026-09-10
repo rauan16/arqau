@@ -145,7 +145,7 @@ export default function SmartOnboarding() {
 
   return <main className="min-h-screen bg-cream px-5 py-8 sm:px-8 sm:py-10">
     <div className="mx-auto max-w-[1040px]">
-      <header className="flex items-center justify-between"><Link href="/" className="text-[20px] font-extrabold tracking-[0.08em]">ARQAU</Link><span className="text-[13px] font-semibold text-ink-soft">{String(step + 1).padStart(2, "0")} / 06</span></header>
+      <header className="flex items-center justify-between"><Link href="/" className="text-[20px] font-extrabold tracking-[0.08em]">ARQAU</Link><span className="text-[13px] font-semibold text-ink-soft">{String(step + 1).padStart(2, "0")} / {String(questions.length).padStart(2, "0")}</span></header>
       <div className="mt-10 h-1.5 rounded-full bg-ink/[0.08]"><motion.div className="h-1.5 rounded-full bg-orange" animate={{ width: `${((step + 1) / questions.length) * 100}%` }} transition={{ duration: 0.4 }} /></div>
       <div className="mt-5 flex justify-between text-[12px] text-ink-soft"><span>{sectionLabel}</span><span>{Math.round(((step + 1) / questions.length) * 100)}%</span></div>
       <div className="grid items-center gap-12 py-14 lg:grid-cols-[0.72fr_1.28fr] lg:py-20">

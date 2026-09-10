@@ -64,22 +64,22 @@ export default function EmployerSection() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-7 mb-12">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-7 mb-12">
             <div>
               <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.employees}</p>
-              <p className="text-[28px] font-bold tracking-tight">{employerDemo.employees.toLocaleString("en-US")}</p>
+              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{employerDemo.employees.toLocaleString("en-US")}</p>
             </div>
             <div>
               <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.earnedPayroll}</p>
-              <p className="text-[28px] font-bold tracking-tight">{formatTenge(employerDemo.earnedPayroll)}</p>
+              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{formatTenge(employerDemo.earnedPayroll)}</p>
             </div>
             <div>
               <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.activeThisMonth}</p>
-              <p className="text-[28px] font-bold tracking-tight">{employerDemo.activeThisMonth.toLocaleString("en-US")}</p>
+              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{employerDemo.activeThisMonth.toLocaleString("en-US")}</p>
             </div>
             <div>
               <p className="text-[12px] text-cream/70 mb-1.5">Withdrawals</p>
-              <p className="text-[28px] font-bold tracking-tight">{formatTenge(employerDemo.withdrawals)}</p>
+              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{formatTenge(employerDemo.withdrawals)}</p>
             </div>
           </div>
 

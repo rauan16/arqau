@@ -18,7 +18,7 @@ export default function ProductShowcase() {
   ];
   return (
     <section id="features" className="py-28 lg:py-36 bg-cream-orange overflow-hidden">
-      <div className="container-arqau grid lg:grid-cols-[0.75fr_1.25fr] gap-16 items-center">
+      <div className="container-arqau grid lg:grid-cols-[0.75fr_1.25fr] gap-16 items-center min-w-0">
         <div className="max-w-[440px]">
           <motion.p
             initial={{ opacity: 0, y: 12 }}
@@ -61,7 +61,7 @@ export default function ProductShowcase() {
           </motion.div>
         </div>
 
-        <div className="flex items-center gap-[-30px] pl-4 lg:pl-0 overflow-x-auto lg:overflow-visible pb-6 -mr-4 lg:mr-0 scrollbar-hide">
+        <div className="flex gap-3 overflow-x-auto lg:gap-[-30px] lg:overflow-visible pb-6 px-4 lg:px-0 scrollbar-hide w-full max-w-full min-w-0">
           {screens.map((s, i) => (
             <motion.div
               key={s.label}
@@ -69,12 +69,22 @@ export default function ProductShowcase() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
               transition={{ duration: 0.5, delay: i * 0.08, ease: easeOut }}
-              style={{ marginLeft: i === 0 ? 0 : -30, rotate: s.rotate, zIndex: i }}
-              className="relative"
+              style={{ rotate: s.rotate, zIndex: i }}
+              className="relative shrink-0"
             >
-              <MiniPhoneFrame>
-                <s.comp />
-              </MiniPhoneFrame>
+              <div className="sm:hidden">
+                <div className="w-[108px] h-[216px] shrink-0 rounded-[20px] bg-near-black p-[3px] shadow-[0_18px_36px_-10px_rgba(20,15,10,0.4)]">
+                  <div className="relative w-full h-full rounded-[14px] overflow-hidden bg-cream border border-black/40">
+                    <div className="absolute top-[3px] left-1/2 -translate-x-1/2 w-[28px] h-[7px] bg-near-black rounded-full z-20" />
+                    <s.comp />
+                  </div>
+                </div>
+              </div>
+              <div className="hidden sm:block">
+                <MiniPhoneFrame>
+                  <s.comp />
+                </MiniPhoneFrame>
+              </div>
             </motion.div>
           ))}
         </div>

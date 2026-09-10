@@ -41,7 +41,7 @@ export default function Hero() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1.2, ease: "easeOut" }}
-              className="pointer-events-none absolute inset-0 -z-10"
+              className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
             >
               <svg
                 className="hidden lg:block absolute -right-[8%] -top-[12%] w-[78%] h-[150%]"
@@ -60,10 +60,10 @@ export default function Hero() {
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="lg:hidden absolute left-[-25%] right-[-25%] top-[48%] bottom-[-10%] rounded-t-[48%] bg-orange-2" />
+              <div className="lg:hidden absolute left-0 right-0 top-[48%] bottom-[-10%] rounded-t-[48%] bg-orange-2" />
             </motion.div>
 
-      <div className="relative z-10 max-w-[1480px] mx-auto pl-6 pr-6 lg:pl-[72px] lg:pr-[72px]">
+      <div className="relative z-10 w-full max-w-[1480px] mx-auto px-6 lg:px-[72px]">
         <div className="grid lg:grid-cols-[minmax(440px,1fr)_minmax(480px,1.1fr)] xl:grid-cols-[1fr_1.1fr] gap-10 lg:gap-12 xl:gap-16 items-start">
           {/* left: copy */}
           <div className="relative z-10 max-w-[520px]">
