@@ -96,9 +96,15 @@ async def update_transaction(tx_id: str, data: dict, current_user: User = Depend
     tx = result.scalar_one_or_none()
     if not tx:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    allowed = {"type", "amount_minor", "category", "merchant", "description", "date"}
     for key, value in data.items():
-        if hasattr(tx, key):
-            setattr(tx, key, value)
+        if key not in allowed:
+            continue
+        if key == "amount_minor" and (not isinstance(value, int) or value <= 0):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="amount_minor must be a positive integer")
+        if key == "type" and value not in ("income", "expense"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="type must be 'income' or 'expense'")
+        setattr(tx, key, value)
     await db.commit()
     await db.refresh(tx)
     return TransactionResponse(
@@ -255,11 +261,11 @@ async def update_goal(goal_id: str, data: dict, current_user: User = Depends(get
     if not goal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
     for key, value in data.items():
-        if hasattr(goal, key):
-            if key == "target_minor" and goal.target_minor > 0:
-                goal.progress_pct = min(100, int((goal.current_minor or 0) / value * 100))
-            else:
-                setattr(goal, key, value)
+        if not hasattr(goal, key):
+            continue
+        setattr(goal, key, value)
+        if key in ("target_minor", "current_minor") and goal.target_minor > 0:
+            goal.progress_pct = min(100, int((goal.current_minor or 0) / goal.target_minor * 100))
     await db.commit()
     await db.refresh(goal)
     return GoalResponse(

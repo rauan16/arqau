@@ -126,6 +126,29 @@ def _safe_log_error(context: str, exc: Exception, **extra):
     )
 
 
+def _extract_json(content: str) -> dict:
+    """Parse the model response into a dict, tolerating markdown fences and
+    extra prose. Raises ValueError if no valid JSON object is present."""
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:].strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Fall back to the first {...} block if the model wrapped its answer.
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+    raise ValueError("AI returned no valid JSON object")
+
+
 async def analyze_withdrawal(ctx: dict) -> dict:
     prompt = build_withdrawal_prompt(ctx)
     try:
@@ -136,11 +159,7 @@ async def analyze_withdrawal(ctx: dict) -> dict:
             max_tokens=500,
         )
         content = completion.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.strip("`")
-            if content.startswith("json"):
-                content = content[4:].strip()
-        result = json.loads(content)
+        result = _extract_json(content)
         result.setdefault("remaining_amount", ctx.get("available_amount", 0) - ctx.get("withdrawal_amount", 0))
         result.setdefault("withdrawal_amount", ctx.get("withdrawal_amount", 0))
         result.setdefault("earned_amount", ctx.get("earned_amount", 0))
@@ -169,6 +188,9 @@ async def analyze_withdrawal(ctx: dict) -> dict:
         if e.status_code == 402:
             raise RuntimeError("AI_CREDITS_EXCEEDED")
         raise RuntimeError(f"AI_HTTP_{e.status_code}")
+    except ValueError as e:
+        _safe_log_error("analyze_withdrawal", e)
+        raise RuntimeError("AI_MALFORMED_RESPONSE")
     except Exception as e:
         _safe_log_error("analyze_withdrawal", e)
         raise RuntimeError("AI_UNKNOWN_ERROR")
@@ -217,11 +239,7 @@ async def chat_with_user(message: str, ctx: dict) -> dict:
             max_tokens=400,
         )
         content = completion.choices[0].message.content.strip()
-        if content.startswith("```"):
-            content = content.strip("`")
-            if content.startswith("json"):
-                content = content[4:].strip()
-        result = json.loads(content)
+        result = _extract_json(content)
         result.setdefault("disclaimer", "This is illustrative guidance, not financial advice. ARQAU does not guarantee any specific financial outcome.")
         return result
     except APITimeoutError as e:
@@ -243,6 +261,9 @@ async def chat_with_user(message: str, ctx: dict) -> dict:
         if e.status_code == 402:
             raise RuntimeError("AI_CREDITS_EXCEEDED")
         raise RuntimeError(f"AI_HTTP_{e.status_code}")
+    except ValueError as e:
+        _safe_log_error("chat", e)
+        raise RuntimeError("AI_MALFORMED_RESPONSE")
     except Exception as e:
         _safe_log_error("chat", e)
         raise RuntimeError("AI_UNKNOWN_ERROR")

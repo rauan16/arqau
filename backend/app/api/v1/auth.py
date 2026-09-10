@@ -148,7 +148,11 @@ def _normalize_income_range(value: str | None) -> str | None:
     """Strip currency symbols and whitespace for robust lookup."""
     if not value:
         return None
-    return value.replace("\u20b8", "").replace("\u2b2f", "").strip()
+    cleaned = value.replace("\u20b8", "").replace("\u2b2f", "").strip()
+    # Collapse any whitespace introduced around the "+" suffix, e.g.
+    # "750,000 +" -> "750,000+" so it matches the map key exactly.
+    cleaned = cleaned.replace(" +", "+").replace("+ ", "+")
+    return cleaned
 
 
 async def _sync_demo_earned_wages(db, user_id: str, monthly_income_range: str | None):
@@ -156,7 +160,7 @@ async def _sync_demo_earned_wages(db, user_id: str, monthly_income_range: str | 
 
     - Creates the record if it does not exist.
     - Updates earned_amount_minor when onboarding income changes.
-    - Preserves accessed_amount_minor (real withdrawal history).
+    - Preserves accessed_amount_minor (real withdrawal history) on update.
     - available_amount_minor is always derived: earned - accessed.
     """
     normalized = _normalize_income_range(monthly_income_range)
@@ -177,9 +181,10 @@ async def _sync_demo_earned_wages(db, user_id: str, monthly_income_range: str | 
         )
         db.add(ew)
     else:
+        # Only the earned target changes with the onboarding income range.
+        # accessed_amount_minor is real withdrawal history and MUST be preserved.
         if demo:
             ew.earned_amount_minor = demo[0]
-            ew.accessed_amount_minor = demo[1]
         ew.available_amount_minor = max(0, ew.earned_amount_minor - ew.accessed_amount_minor)
 
     await db.commit()

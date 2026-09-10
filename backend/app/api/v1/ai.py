@@ -82,6 +82,11 @@ async def analyze_withdrawal_endpoint(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
             )
+        if msg == "AI_MALFORMED_RESPONSE":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI analysis returned an unexpected response. Please try again.",
+            )
         if msg == "AI_AUTH_FAILED":
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -163,6 +168,11 @@ async def chat_endpoint(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
+            )
+        if msg == "AI_MALFORMED_RESPONSE":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI assistant returned an unexpected response. Please try again.",
             )
         if msg == "AI_AUTH_FAILED":
             raise HTTPException(
