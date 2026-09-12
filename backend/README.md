@@ -43,3 +43,18 @@ uvicorn app.main:app --reload --port 8000
 - `POST /ai/analyze-withdrawal`
 - `POST /ai/chat`
 - `GET /health`
+
+## Database migrations
+
+Run migrations from this directory with the module form so they work even when the Alembic console script is not on `PATH`:
+
+```bash
+python -m alembic upgrade head
+```
+
+The initial revision has two safe paths:
+
+- Empty SQLite or PostgreSQL database: create the seven existing application tables and record revision `20260911_0001`.
+- Complete legacy SQLite database: add only the Alembic version record. It does not create, drop, rename, or rewrite application tables or data.
+
+A database containing only some application tables is rejected instead of being treated as a baseline. Do not run `alembic downgrade base` against the legacy SQLite database; restore a backup for rollback. Disposable databases can be deleted after validation.
