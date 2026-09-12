@@ -1,12 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
 from app.database import get_db
-from app.models import User, Onboarding, EarnedWages
-from app.schemas.auth import UserRegister, UserLogin, UserResponse, TokenResponse, OnboardingData
-from app.core.security import get_password_hash, verify_password, create_access_token, decode_access_token
+from app.models import User, Onboarding, EarnedWages, RefreshToken
+from app.schemas.auth import (
+    LogoutRequest,
+    OnboardingData,
+    RefreshRequest,
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+)
+from app.core.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    decode_access_token,
+    create_refresh_token,
+    hash_refresh_token,
+    make_family_id,
+    role_from_user,
+)
 from app.config import get_settings
 
 settings = get_settings()
@@ -35,6 +52,27 @@ async def get_current_user(
     return user
 
 
+async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
+    access_token = create_access_token({"sub": user.id, "role": role_from_user(user)})
+    plaintext, token_hash, expires_at = create_refresh_token(user.id)
+    refresh_row = RefreshToken(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        token_hash=token_hash,
+        family_id=make_family_id(),
+        expires_at=expires_at,
+    )
+    db.add(refresh_row)
+    await db.commit()
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=user.id,
+        refresh_token=plaintext,
+        role=role_from_user(user),
+    )
+
+
 @router.post("/register", response_model=TokenResponse)
 async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
@@ -50,8 +88,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    access_token = create_access_token({"sub": user.id})
-    return TokenResponse(access_token=access_token, token_type="bearer", user_id=user.id)
+    return await _issue_tokens(db, user)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -62,8 +99,108 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive account")
-    access_token = create_access_token({"sub": user.id})
-    return TokenResponse(access_token=access_token, token_type="bearer", user_id=user.id)
+    return await _issue_tokens(db, user)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    data: RefreshRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    refresh_token = data.refresh_token
+    token_hash = hash_refresh_token(refresh_token)
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    if row.revoked_at is not None:
+        # Reuse of a revoked/rotated token: fail closed and revoke the family.
+        await _revoke_family(db, row.family_id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked")
+    if row.expires_at < _utcnow():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
+    user = await db.get(User, row.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # Rotate: revoke old token, issue new one in the same family.
+    row.revoked_at = _utcnow()
+    row.last_used_at = _utcnow()
+    plaintext, new_hash, new_expires = create_refresh_token(user.id)
+    new_row = RefreshToken(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        token_hash=new_hash,
+        family_id=row.family_id,
+        rotated_from_id=row.id,
+        expires_at=new_expires,
+    )
+    db.add(new_row)
+    await db.commit()
+
+    access_token = create_access_token({"sub": user.id, "role": role_from_user(user)})
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=user.id,
+        refresh_token=plaintext,
+        role=role_from_user(user),
+    )
+
+
+@router.post("/logout")
+async def logout(
+    data: LogoutRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    refresh_token = data.refresh_token
+    token_hash = hash_refresh_token(refresh_token)
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    row = result.scalar_one_or_none()
+    if row and row.revoked_at is None:
+        row.revoked_at = _utcnow()
+        await db.commit()
+    return {"detail": "Logged out"}
+
+
+@router.post("/logout-all")
+async def logout_all(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == current_user.id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    now = _utcnow()
+    for row in result.scalars().all():
+        row.revoked_at = now
+    await db.commit()
+    return {"detail": "All sessions revoked"}
+
+
+async def _revoke_family(db: AsyncSession, family_id: str) -> None:
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.family_id == family_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    now = _utcnow()
+    for row in result.scalars().all():
+        row.revoked_at = now
+    await db.commit()
+
+
+def _utcnow():
+    from datetime import datetime
+    return datetime.utcnow()
 
 
 @router.get("/me", response_model=UserResponse)

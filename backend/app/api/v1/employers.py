@@ -3,10 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import Employer, User
+from app.models import Employer, EmployerAdmin, User
 from app.schemas.employer import EmployerCreate, EmployerRead
-from app.services.employer_service import create_employer as create_employer_service, get_employer_by_id
+from app.services.employer_service import create_employer as create_employer_service
 from app.api.v1.auth import get_current_user
+from app.core.authorization import (
+    assert_employer_access,
+    is_super_admin,
+    get_employer_scope,
+)
 
 router = APIRouter(prefix="/employers", tags=["employer"])
 
@@ -21,6 +26,10 @@ async def create_employer(
         employer = await create_employer_service(db, data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    # Creator becomes an employer_admin for the new employer.
+    db.add(EmployerAdmin(user_id=current_user.id, employer_id=employer.id))
+    await db.commit()
+    await db.refresh(employer)
     return employer
 
 
@@ -30,7 +39,4 @@ async def get_employer(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    employer = await get_employer_by_id(db, employer_id)
-    if not employer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employer not found")
-    return employer
+    return await assert_employer_access(current_user, db, employer_id)

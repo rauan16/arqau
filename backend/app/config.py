@@ -24,7 +24,8 @@ class Settings(BaseModel):
     openai_model: str = "gpt-4o-mini"
     secret_key: str = Field(default="", repr=False)
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 43200
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 14
     database_url: str = "sqlite+aiosqlite:///./arqau.db"
     cors_origins: str = "http://localhost:3000"
 
@@ -33,6 +34,8 @@ class Settings(BaseModel):
         if self.environment != "production":
             if self.access_token_expire_minutes <= 0:
                 raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be positive")
+            if self.refresh_token_expire_days <= 0:
+                raise ValueError("REFRESH_TOKEN_EXPIRE_DAYS must be positive")
             return self
 
         errors = []
@@ -46,6 +49,8 @@ class Settings(BaseModel):
             errors.append("OPENAI_API_KEY is required")
         if self.access_token_expire_minutes <= 0:
             errors.append("ACCESS_TOKEN_EXPIRE_MINUTES must be positive")
+        if self.refresh_token_expire_days <= 0:
+            errors.append("REFRESH_TOKEN_EXPIRE_DAYS must be positive")
         if errors:
             raise ValueError("Production configuration is invalid: " + "; ".join(errors))
         return self
@@ -68,7 +73,8 @@ def get_settings() -> Settings:
         secret_key=(os.getenv("SECRET_KEY") or "").strip()
         or ("" if environment == "production" else DEFAULT_DEVELOPMENT_SECRET_KEY),
         algorithm=os.getenv("ALGORITHM", "HS256"),
-        access_token_expire_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200")),
+        access_token_expire_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")),
+        refresh_token_expire_days=int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "14")),
         database_url=(os.getenv("DATABASE_URL") or "").strip()
         or ("" if environment == "production" else "sqlite+aiosqlite:///./arqau.db"),
         cors_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000"),

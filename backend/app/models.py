@@ -1,9 +1,20 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Index, String, Text, text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 from datetime import datetime
 from uuid import uuid4
 from app.database import Base
+
+# Role constants. Stored as plain strings on User.role.
+ROLE_EMPLOYEE = "employee"
+ROLE_EMPLOYER_ADMIN = "employer_admin"
+ROLE_FINANCE_MANAGER = "finance_manager"
+ROLE_SUPER_ADMIN = "super_admin"
+
+# Default role assigned to legacy users who have no explicit role.
+DEFAULT_ROLE = ROLE_EMPLOYEE
+
+VALID_ROLES = (ROLE_EMPLOYEE, ROLE_EMPLOYER_ADMIN, ROLE_FINANCE_MANAGER, ROLE_SUPER_ADMIN)
 
 
 class User(Base):
@@ -15,6 +26,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    # Explicit role. Legacy users without a value default to employee.
+    role = Column(String, nullable=False, server_default=DEFAULT_ROLE)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     onboarding = relationship("Onboarding", back_populates="user", uselist=False)
@@ -24,6 +37,8 @@ class User(Base):
     earned_wages = relationship("EarnedWages", back_populates="user", uselist=False)
     wage_requests = relationship("WageAccessRequest", back_populates="user")
     employee = relationship("Employee", back_populates="user")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    employer_admins = relationship("EmployerAdmin", back_populates="user", cascade="all, delete-orphan")
 
 
 class Onboarding(Base):
@@ -135,6 +150,7 @@ class Employer(Base):
     )
 
     employments = relationship("Employment", back_populates="employer")
+    employer_admins = relationship("EmployerAdmin", back_populates="employer")
 
 
 class Employee(Base):
@@ -213,3 +229,56 @@ class SalaryProfile(Base):
     )
 
     employment = relationship("Employment", back_populates="salary_profile")
+
+
+class RefreshToken(Base):
+    """Persistent refresh token.
+
+    Only a SHA-256 hash of the token is stored. The plaintext token is
+    never persisted. Rotation replaces the token: a new row is created
+    and the previous row is marked revoked via rotated_from_id + revoked_at.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)
+    family_id = Column(String, nullable=False)
+    rotated_from_id = Column(String, ForeignKey("refresh_tokens.id", ondelete="SET NULL"), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_refresh_tokens_token_hash"),
+        Index("ix_refresh_tokens_family_id", "family_id"),
+        Index("ix_refresh_tokens_user_id", "user_id"),
+        Index("ix_refresh_tokens_revoked_at", "revoked_at"),
+    )
+
+    user = relationship("User", back_populates="refresh_tokens")
+    rotated_from = relationship("RefreshToken", remote_side=[id], viewonly=True)
+
+
+class EmployerAdmin(Base):
+    """Explicit employer-admin membership.
+
+    A user with role employer_admin is scoped to the employers listed here.
+    super_admin has no rows here and is unrestricted.
+    """
+
+    __tablename__ = "employer_admins"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    employer_id = Column(String, ForeignKey("employers.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "employer_id", name="uq_employer_admins_user_employer"),
+    )
+
+    user = relationship("User", back_populates="employer_admins")
+    employer = relationship("Employer", back_populates="employer_admins")

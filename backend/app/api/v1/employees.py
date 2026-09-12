@@ -5,8 +5,16 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import Employee, User
 from app.schemas.employee import EmployeeCreate, EmployeeRead
-from app.services.employee_service import create_employee as create_employee_service, get_employee_by_id
+from app.services.employee_service import create_employee as create_employee_service
 from app.api.v1.auth import get_current_user
+from app.core.authorization import (
+    assert_employee_access,
+    is_super_admin,
+    get_employer_scope,
+    is_employee,
+    _user_has_scope,
+)
+from app.models import Employment
 
 router = APIRouter(prefix="/employees", tags=["employee"])
 
@@ -17,11 +25,27 @@ async def create_employee(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Self-service: an authenticated user may create their own Employee row.
+    if data.user_id == current_user.id:
+        try:
+            return await create_employee_service(db, data)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    # Arbitrary employee creation: validate the target user exists first so we
+    # return a controlled 400 (matching service semantics) before any
+    # authorization decision.
+    target_user = await db.get(User, data.user_id)
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
+
+    if not (is_super_admin(current_user) or await _user_has_scope(current_user, db)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
     try:
-        employee = await create_employee_service(db, data)
+        return await create_employee_service(db, data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return employee
 
 
 @router.get("/{employee_id}", response_model=EmployeeRead)
@@ -30,7 +54,4 @@ async def get_employee(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    employee = await get_employee_by_id(db, employee_id)
-    if not employee:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
-    return employee
+    return await assert_employee_access(current_user, db, employee_id)

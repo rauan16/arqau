@@ -36,6 +36,9 @@ PHASE12_INDEXES = (
     "ix_salary_profiles_status",
 )
 PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effective_dates")
+PHASE12_TABLES = ("employers", "employees", "employments", "salary_profiles")
+PHASE13_TABLES = ("refresh_tokens", "employer_admins")
+CURRENT_HEAD = "20260912_0003"
 
 
 class Phase12MigrationTests(unittest.TestCase):
@@ -53,6 +56,8 @@ class Phase12MigrationTests(unittest.TestCase):
             for index in PHASE12_INDEXES:
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
             for table in PHASE12_TABLES:
+                connection.execute(f"DROP TABLE IF EXISTS {table}")
+            for table in PHASE13_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -113,7 +118,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
-                    ("20260911_0002",),
+                    (CURRENT_HEAD,),
                 )
                 for table in PHASE12_TABLES:
                     for column in ("id",):
@@ -148,7 +153,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
-                    ("20260911_0002",),
+                    (CURRENT_HEAD,),
                 )
                 self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             finally:

@@ -59,9 +59,13 @@ class ApiCompatibilityTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(registration.status_code, 200)
         token_payload = registration.json()
-        self.assertEqual(
-            set(token_payload), {"access_token", "token_type", "user_id"}
-        )
+        # TokenResponse is intentionally extended in Phase 1.3 with
+        # refresh_token and role; the original three fields remain mandatory.
+        self.assertIn("access_token", token_payload)
+        self.assertIn("token_type", token_payload)
+        self.assertIn("user_id", token_payload)
+        self.assertIn("refresh_token", token_payload)
+        self.assertIn("role", token_payload)
         token = token_payload["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
