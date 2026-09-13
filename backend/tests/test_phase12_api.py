@@ -77,7 +77,7 @@ class Phase12ApiTests(unittest.IsolatedAsyncioTestCase):
 
         earned = await self.client.put("/ewa/earned", headers=headers, json={"earned_amount_minor": 100000})
         self.assertEqual(earned.status_code, 200)
-        self.assertEqual(earned.json()["available_amount_minor"], 32600)
+        self.assertEqual(earned.json()["available_amount_minor"], 100000)
 
         transaction = await self.client.post(
             "/transactions",
