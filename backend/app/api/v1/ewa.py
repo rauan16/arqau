@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import User, EarnedWages, WageAccessRequest
 from app.schemas.ewa import EarnedWagesUpdate, EarnedWagesResponse, AvailableResponse, WageAccessRequestCreate, WageAccessRequestResponse
 from app.api.v1.auth import get_current_user
+from app.services.audit_service import USER_REQUESTED_WITHDRAWAL, record_audit_event
 import uuid
 
 router = APIRouter(prefix="/ewa", tags=["ewa"])
@@ -97,6 +98,15 @@ async def create_request(data: WageAccessRequestCreate, current_user: User = Dep
         status="pending",
     )
     db.add(req)
+    await record_audit_event(
+        db,
+        actor_user_id=current_user.id,
+        employer_id=None,
+        action=USER_REQUESTED_WITHDRAWAL,
+        entity_type="wage_access_request",
+        entity_id=req.id,
+        metadata={"user_id": current_user.id, "amount_minor": data.amount_minor},
+    )
     ew.accessed_amount_minor += data.amount_minor
     ew.available_amount_minor = calculate_available(ew.earned_amount_minor, ew.accessed_amount_minor)
     await db.commit()

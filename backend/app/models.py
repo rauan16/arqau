@@ -1,5 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Index, String, Text, UniqueConstraint, text
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Index, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import relationship, Mapped
 from datetime import datetime
 from uuid import uuid4
@@ -282,3 +281,34 @@ class EmployerAdmin(Base):
 
     user = relationship("User", back_populates="employer_admins")
     employer = relationship("Employer", back_populates="employer_admins")
+
+
+class AuditLog(Base):
+    """Immutable audit trail for security and business actions.
+
+    actor_user_id and employer_id are nullable: some events (e.g. failed
+    login attempts) may not have a resolved actor or employer scope.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    actor_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    employer_id = Column(String, ForeignKey("employers.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    entity_type = Column(String, nullable=True, index=True)
+    entity_id = Column(String, nullable=True, index=True)
+    request_id = Column(String, nullable=True, index=True)
+    details = Column("metadata", JSON, nullable=True)
+    before_data = Column(JSON, nullable=True)
+    after_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), index=True)
+
+    __table_args__ = (
+        Index("ix_audit_logs_action_created", "action", "created_at"),
+        Index("ix_audit_logs_employer_created", "employer_id", "created_at"),
+        Index("ix_audit_logs_actor_created", "actor_user_id", "created_at"),
+    )
+
+    actor = relationship("User", viewonly=True)
+    employer = relationship("Employer", viewonly=True)

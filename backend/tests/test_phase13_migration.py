@@ -35,7 +35,8 @@ APPLICATION_TABLES = (
 )
 PHASE12_TABLES = ("employers", "employees", "employments", "salary_profiles")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
-CURRENT_HEAD = "20260912_0003"
+PHASE14_TABLES = ("audit_logs",)
+CURRENT_HEAD = "20260912_0004"
 
 # Columns that must remain unchanged across Phase 1.3 upgrades. Additive
 # columns (e.g. users.role) are intentionally excluded so legacy equality
@@ -100,10 +101,14 @@ def _tables(path: Path) -> set[str]:
 
 class Phase13MigrationTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.legacy_path = Path(self.temp_dir.name) / "legacy.db"
+        shutil.copy2(ROOT / "arqau.db", self.legacy_path)
         self._ensure_clean_legacy_database()
 
     def _ensure_clean_legacy_database(self) -> None:
-        db_path = ROOT / "arqau.db"
+        db_path = self.legacy_path
         connection = sqlite3.connect(db_path)
         try:
             for constraint in ("ck_employments_dates", "ck_salary_profiles_effective_dates"):
@@ -119,7 +124,7 @@ class Phase13MigrationTests(unittest.TestCase):
                 "ix_salary_profiles_status",
             ):
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
-            for table in PHASE12_TABLES + PHASE13_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -141,6 +146,7 @@ class Phase13MigrationTests(unittest.TestCase):
             self.assertTrue(set(APPLICATION_TABLES).issubset(tables))
             self.assertTrue(set(PHASE12_TABLES).issubset(tables))
             self.assertTrue(set(PHASE13_TABLES).issubset(tables))
+            self.assertTrue(set(PHASE14_TABLES).issubset(tables))
 
             connection = sqlite3.connect(database_path)
             try:
@@ -153,7 +159,7 @@ class Phase13MigrationTests(unittest.TestCase):
                 connection.close()
 
     def test_phase12_to_phase13_upgrade_preserves_legacy_data(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         self.assertTrue(source.exists())
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "upgrade.db"
@@ -176,7 +182,7 @@ class Phase13MigrationTests(unittest.TestCase):
                 connection.close()
 
     def test_downgrade_and_reupgrade(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "downgrade.db"
             shutil.copy2(source, database_path)
@@ -186,7 +192,7 @@ class Phase13MigrationTests(unittest.TestCase):
             tables = _tables(database_path)
             for table in APPLICATION_TABLES:
                 self.assertIn(table, tables)
-            for table in PHASE12_TABLES + PHASE13_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
                 self.assertNotIn(table, tables)
 
             before = _snapshot(database_path)

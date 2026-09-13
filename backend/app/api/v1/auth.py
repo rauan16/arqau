@@ -14,6 +14,14 @@ from app.schemas.auth import (
     UserRegister,
     UserResponse,
 )
+from app.services.audit_service import (
+    LOGOUT,
+    LOGOUT_ALL,
+    LOGIN_FAILED,
+    LOGIN_SUCCESS,
+    REFRESH_ROTATED,
+    record_audit_event,
+)
 from app.core.security import (
     get_password_hash,
     verify_password,
@@ -78,6 +86,11 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     existing = result.scalar_one_or_none()
     if existing:
+        await record_audit_event(
+            db,
+            action=LOGIN_FAILED,
+            metadata={"reason": "email_already_registered", "email": data.email},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     user = User(
         id=str(uuid.uuid4()),
@@ -88,6 +101,14 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    await record_audit_event(
+        db,
+        actor_user_id=user.id,
+        action=LOGIN_SUCCESS,
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"email": user.email},
+    )
     return await _issue_tokens(db, user)
 
 
@@ -96,9 +117,28 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.hashed_password):
+        await record_audit_event(
+            db,
+            action=LOGIN_FAILED,
+            metadata={"reason": "invalid_credentials", "email": data.email},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
+        await record_audit_event(
+            db,
+            actor_user_id=user.id,
+            action=LOGIN_FAILED,
+            metadata={"reason": "inactive_account", "email": user.email},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive account")
+    await record_audit_event(
+        db,
+        actor_user_id=user.id,
+        action=LOGIN_SUCCESS,
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"email": user.email},
+    )
     return await _issue_tokens(db, user)
 
 
@@ -138,6 +178,14 @@ async def refresh_token(
         expires_at=new_expires,
     )
     db.add(new_row)
+    await record_audit_event(
+        db,
+        actor_user_id=user.id,
+        action=REFRESH_ROTATED,
+        entity_type="refresh_token",
+        entity_id=new_row.id,
+        metadata={"family_id": row.family_id},
+    )
     await db.commit()
 
     access_token = create_access_token({"sub": user.id, "role": role_from_user(user)})
@@ -163,6 +211,13 @@ async def logout(
     row = result.scalar_one_or_none()
     if row and row.revoked_at is None:
         row.revoked_at = _utcnow()
+        await record_audit_event(
+            db,
+            actor_user_id=row.user_id,
+            action=LOGOUT,
+            entity_type="refresh_token",
+            entity_id=row.id,
+        )
         await db.commit()
     return {"detail": "Logged out"}
 
@@ -178,9 +233,16 @@ async def logout_all(
             RefreshToken.revoked_at.is_(None),
         )
     )
+    rows = list(result.scalars().all())
     now = _utcnow()
-    for row in result.scalars().all():
+    for row in rows:
         row.revoked_at = now
+    await record_audit_event(
+        db,
+        actor_user_id=current_user.id,
+        action=LOGOUT_ALL,
+        metadata={"revoked_count": len(rows)},
+    )
     await db.commit()
     return {"detail": "All sessions revoked"}
 

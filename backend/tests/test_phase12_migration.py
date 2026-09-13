@@ -25,6 +25,20 @@ APPLICATION_TABLES = (
     "wage_access_requests",
 )
 
+# Columns that must remain unchanged across upgrades. Additive columns
+# (e.g. users.role) are intentionally excluded so legacy equality checks
+# are not broken by schema growth.
+LEGACY_COLUMNS = {
+    "users": ("id", "email", "name", "hashed_password", "is_verified", "is_active", "created_at"),
+    "onboarding": ("id", "user_id", "pay_frequency", "monthly_income_range", "payday_range", "financial_pressure", "early_access_use_case", "ai_help_preference", "created_at", "updated_at"),
+    "transactions": ("id", "user_id", "type", "amount_minor", "category", "merchant", "description", "date", "created_at"),
+    "budgets": ("id", "user_id", "category", "limit_minor", "spent_minor", "period", "created_at"),
+    "goals": ("id", "user_id", "title", "target_minor", "current_minor", "deadline", "status", "progress_pct", "created_at"),
+    "earned_wages": ("id", "user_id", "earned_amount_minor", "accessed_amount_minor", "available_amount_minor", "period_start", "period_end", "created_at", "updated_at"),
+    "wage_access_requests": ("id", "user_id", "amount_minor", "status", "reason", "created_at"),
+}
+
+
 PHASE12_INDEXES = (
     "ix_employers_status",
     "ix_employees_user_id",
@@ -38,15 +52,20 @@ PHASE12_INDEXES = (
 PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effective_dates")
 PHASE12_TABLES = ("employers", "employees", "employments", "salary_profiles")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
-CURRENT_HEAD = "20260912_0003"
+PHASE14_TABLES = ("audit_logs",)
+CURRENT_HEAD = "20260912_0004"
 
 
 class Phase12MigrationTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.legacy_path = Path(self.temp_dir.name) / "legacy.db"
+        shutil.copy2(ROOT / "arqau.db", self.legacy_path)
         self._ensure_clean_legacy_database()
 
     def _ensure_clean_legacy_database(self) -> None:
-        db_path = ROOT / "arqau.db"
+        db_path = self.legacy_path
         connection = sqlite3.connect(db_path)
         try:
             for constraint in PHASE12_CHECK_CONSTRAINTS:
@@ -55,9 +74,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 )
             for index in PHASE12_INDEXES:
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
-            for table in PHASE12_TABLES:
-                connection.execute(f"DROP TABLE IF EXISTS {table}")
-            for table in PHASE13_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -93,13 +110,15 @@ class Phase12MigrationTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )
             }
-            return {
-                table: connection.execute(
-                    f"SELECT * FROM {table} ORDER BY 1"
+            rows: dict[str, list[tuple]] = {}
+            for table, cols in LEGACY_COLUMNS.items():
+                if table not in existing_tables:
+                    continue
+                col_list = ", ".join(f'"{c}"' for c in cols)
+                rows[table] = connection.execute(
+                    f"SELECT {col_list} FROM {table} ORDER BY 1"
                 ).fetchall()
-                for table in APPLICATION_TABLES
-                if table in existing_tables
-            }
+            return rows
         finally:
             connection.close()
 
@@ -130,7 +149,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 connection.close()
 
     def test_legacy_sqlite_copy_upgrades_without_changing_legacy_data(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         self.assertTrue(source.exists())
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "legacy.db"
@@ -151,6 +170,8 @@ class Phase12MigrationTests(unittest.TestCase):
                 }
                 self.assertTrue(set(APPLICATION_TABLES).issubset(tables))
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE13_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE14_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
@@ -172,7 +193,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 command.upgrade(config, "head")
 
     def test_downgrade_removes_only_phase12_tables(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "downgrade.db"
             shutil.copy2(source, database_path)
@@ -188,13 +209,13 @@ class Phase12MigrationTests(unittest.TestCase):
                 }
                 for table in APPLICATION_TABLES:
                     self.assertIn(table, tables)
-                for table in PHASE12_TABLES:
+                for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
                     self.assertNotIn(table, tables)
             finally:
                 connection.close()
 
     def test_upgrade_after_downgrade_works_again(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "reupgrade.db"
             shutil.copy2(source, database_path)

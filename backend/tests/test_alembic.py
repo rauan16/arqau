@@ -39,7 +39,8 @@ PHASE12_INDEXES = (
 )
 PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effective_dates")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
-CURRENT_HEAD = "20260912_0003"
+PHASE14_TABLES = ("audit_logs",)
+CURRENT_HEAD = "20260912_0004"
 
 # Columns that must remain unchanged across Phase 1.3 upgrades. Additive
 # columns (e.g. users.role) are intentionally excluded so legacy equality
@@ -57,19 +58,21 @@ _LEGACY_COLUMNS = {
 
 class AlembicTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.legacy_path = Path(self.temp_dir.name) / "legacy.db"
+        shutil.copy2(ROOT / "arqau.db", self.legacy_path)
         self._ensure_clean_legacy_database()
 
     def _ensure_clean_legacy_database(self) -> None:
-        db_path = ROOT / "arqau.db"
+        db_path = self.legacy_path
         connection = sqlite3.connect(db_path)
         try:
             for constraint in PHASE12_CHECK_CONSTRAINTS:
                 connection.execute(f"DROP INDEX IF EXISTS {constraint}")
             for index in PHASE12_INDEXES:
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
-            for table in PHASE12_TABLES:
-                connection.execute(f"DROP TABLE IF EXISTS {table}")
-            for table in PHASE13_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -142,6 +145,9 @@ class AlembicTests(unittest.TestCase):
                     )
                 }
                 self.assertTrue(set(APPLICATION_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE12_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE13_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE14_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
@@ -151,7 +157,7 @@ class AlembicTests(unittest.TestCase):
                 connection.close()
 
     def test_legacy_database_is_stamped_without_data_changes(self) -> None:
-        source = ROOT / "arqau.db"
+        source = self.legacy_path
         self.assertTrue(source.exists())
 
         with tempfile.TemporaryDirectory() as directory:

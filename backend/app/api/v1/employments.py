@@ -3,8 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import Employer, Employment, User
+from app.models import Employment, User
 from app.schemas.employment import EmploymentCreate, EmploymentRead
+from app.services.audit_service import EMPLOYMENT_CREATED, record_audit_event
 from app.services.employment_service import create_employment as create_employment_service
 from app.api.v1.auth import get_current_user
 from app.core.authorization import (
@@ -30,9 +31,22 @@ async def create_employment(
     if not is_super_admin(current_user) and data.employer_id not in scope:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employer not found")
     try:
-        return await create_employment_service(db, data)
+        employment = await create_employment_service(db, data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    await record_audit_event(
+        db,
+        actor_user_id=current_user.id,
+        employer_id=employment.employer_id,
+        action=EMPLOYMENT_CREATED,
+        entity_type="employment",
+        entity_id=employment.id,
+        metadata={"employee_id": employment.employee_id},
+    )
+    await db.commit()
+    await db.refresh(employment)
+    return employment
 
 
 @router.get("/{employment_id}", response_model=EmploymentRead)
