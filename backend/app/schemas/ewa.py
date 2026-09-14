@@ -86,3 +86,21 @@ class EwaPolicyRead(BaseModel):
     updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class EWAResultResponse(BaseModel):
+    """Authoritative EWA calculation result from the deterministic engine."""
+    salary_amount_minor: int
+    earned_amount_minor: int
+    policy_limit_minor: int
+    reserved_amount_minor: int
+    paid_amount_minor: int
+    available_amount_minor: int
+    pay_period_start: str
+    pay_period_end: str
+    calculation_date: str
+    eligible: bool
+    eligibility_reasons: list[str]
+    minimum_withdrawal_minor: Optional[int] = None
+    maximum_withdrawal_minor: Optional[int] = None
+    can_request_withdrawal: bool = False

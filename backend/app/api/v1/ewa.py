@@ -1,11 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from datetime import date
 from app.database import get_db
-from app.models import User, EarnedWages, WageAccessRequest
-from app.schemas.ewa import EarnedWagesUpdate, EarnedWagesResponse, AvailableResponse, WageAccessRequestCreate, WageAccessRequestResponse
+from app.models import User, EarnedWages, WageAccessRequest, Employee
+from app.schemas.ewa import (
+    EarnedWagesUpdate,
+    EarnedWagesResponse,
+    AvailableResponse,
+    WageAccessRequestCreate,
+    WageAccessRequestResponse,
+    EWAResultResponse,
+)
 from app.api.v1.auth import get_current_user
 from app.services.audit_service import USER_REQUESTED_WITHDRAWAL, record_audit_event
+from app.services.ewa_engine import calculate_ewa
 import uuid
 
 router = APIRouter(prefix="/ewa", tags=["ewa"])
@@ -72,11 +81,39 @@ async def update_earned(data: EarnedWagesUpdate, current_user: User = Depends(ge
 
 @router.get("/available", response_model=AvailableResponse)
 async def get_available(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(EarnedWages).where(EarnedWages.user_id == current_user.id))
-    ew = result.scalar_one_or_none()
-    if not ew:
-        return AvailableResponse(available_amount_minor=0)
-    return AvailableResponse(available_amount_minor=ew.available_amount_minor)
+    """Get available amount using deterministic engine.
+
+    Returns 0 if required real data (Employee, Employment, SalaryProfile, EwaPolicy) is incomplete.
+    Legacy EarnedWages is NOT used as an authoritative source.
+    """
+    calc = await calculate_ewa(db, current_user.id)
+    return AvailableResponse(available_amount_minor=calc.available_amount_minor)
+
+
+@router.get("/calculation", response_model=EWAResultResponse)
+async def get_calculation(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Authoritative EWA calculation from deterministic backend engine.
+
+    Returns structured result with all calculation components.
+    No demo data, no AI, integer money only.
+    """
+    calc = await calculate_ewa(db, current_user.id)
+    return EWAResultResponse(
+        salary_amount_minor=calc.salary_amount_minor,
+        earned_amount_minor=calc.earned_amount_minor,
+        policy_limit_minor=calc.policy_limit_minor,
+        reserved_amount_minor=calc.reserved_amount_minor,
+        paid_amount_minor=calc.paid_amount_minor,
+        available_amount_minor=calc.available_amount_minor,
+        pay_period_start=calc.pay_period_start.isoformat(),
+        pay_period_end=calc.pay_period_end.isoformat(),
+        calculation_date=calc.calculation_date.isoformat(),
+        eligible=calc.eligible,
+        eligibility_reasons=list(calc.eligibility_reasons),
+        minimum_withdrawal_minor=calc.minimum_withdrawal_minor,
+        maximum_withdrawal_minor=calc.maximum_withdrawal_minor,
+        can_request_withdrawal=calc.can_request_withdrawal,
+    )
 
 
 @router.post("/request", response_model=WageAccessRequestResponse)
