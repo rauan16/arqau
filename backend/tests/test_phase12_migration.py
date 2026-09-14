@@ -53,7 +53,8 @@ PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effecti
 PHASE12_TABLES = ("employers", "employees", "employments", "salary_profiles")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
 PHASE14_TABLES = ("audit_logs",)
-CURRENT_HEAD = "20260912_0004"
+PHASE22_TABLES = ("ewa_policies",)
+CURRENT_HEAD = "4b8dc4775b9b"
 
 
 class Phase12MigrationTests(unittest.TestCase):
@@ -74,7 +75,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 )
             for index in PHASE12_INDEXES:
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
-            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES + PHASE22_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -135,6 +136,7 @@ class Phase12MigrationTests(unittest.TestCase):
                     for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 }
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE22_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
@@ -172,6 +174,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
                 self.assertTrue(set(PHASE13_TABLES).issubset(tables))
                 self.assertTrue(set(PHASE14_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE22_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
@@ -209,7 +212,7 @@ class Phase12MigrationTests(unittest.TestCase):
                 }
                 for table in APPLICATION_TABLES:
                     self.assertIn(table, tables)
-                for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
+                for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES + PHASE22_TABLES:
                     self.assertNotIn(table, tables)
             finally:
                 connection.close()

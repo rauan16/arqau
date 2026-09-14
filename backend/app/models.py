@@ -150,6 +150,7 @@ class Employer(Base):
 
     employments = relationship("Employment", back_populates="employer")
     employer_admins = relationship("EmployerAdmin", back_populates="employer")
+    ewa_policies = relationship("EwaPolicy", back_populates="employer", uselist=False)
 
 
 class Employee(Base):
@@ -312,3 +313,40 @@ class AuditLog(Base):
 
     actor = relationship("User", viewonly=True)
     employer = relationship("Employer", viewonly=True)
+
+
+class EwaPolicy(Base):
+    """Employer-scoped Earned Wage Access policy.
+
+    One active policy per employer. Defines EWA access rules.
+    """
+
+    __tablename__ = "ewa_policies"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    employer_id = Column(String, ForeignKey("employers.id", ondelete="CASCADE"), nullable=False, unique=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    max_access_percentage = Column(Integer, nullable=False)
+    max_withdrawals_per_period = Column(Integer, nullable=True)
+    minimum_tenure_days = Column(Integer, nullable=True)
+    minimum_remaining_salary_minor = Column(Integer, nullable=True)
+    minimum_withdrawal_minor = Column(Integer, nullable=True)
+    maximum_withdrawal_minor = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_ewa_policies_employer_id", "employer_id", unique=True),
+        CheckConstraint("max_access_percentage >= 0 AND max_access_percentage <= 100", name="ck_ewa_policy_percentage"),
+        CheckConstraint("max_withdrawals_per_period IS NULL OR max_withdrawals_per_period >= 0", name="ck_ewa_policy_max_withdrawals"),
+        CheckConstraint("minimum_tenure_days IS NULL OR minimum_tenure_days >= 0", name="ck_ewa_policy_tenure"),
+        CheckConstraint("minimum_remaining_salary_minor IS NULL OR minimum_remaining_salary_minor >= 0", name="ck_ewa_policy_min_remaining"),
+        CheckConstraint("minimum_withdrawal_minor IS NULL OR minimum_withdrawal_minor >= 0", name="ck_ewa_policy_min_withdrawal"),
+        CheckConstraint("maximum_withdrawal_minor IS NULL OR maximum_withdrawal_minor >= 0", name="ck_ewa_policy_max_withdrawal"),
+        CheckConstraint(
+            "minimum_withdrawal_minor IS NULL OR maximum_withdrawal_minor IS NULL OR minimum_withdrawal_minor <= maximum_withdrawal_minor",
+            name="ck_ewa_policy_withdrawal_bounds",
+        ),
+    )
+
+    employer = relationship("Employer", back_populates="ewa_policies")

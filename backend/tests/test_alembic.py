@@ -40,7 +40,8 @@ PHASE12_INDEXES = (
 PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effective_dates")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
 PHASE14_TABLES = ("audit_logs",)
-CURRENT_HEAD = "20260912_0004"
+PHASE22_TABLES = ("ewa_policies",)
+CURRENT_HEAD = "4b8dc4775b9b"
 
 # Columns that must remain unchanged across Phase 1.3 upgrades. Additive
 # columns (e.g. users.role) are intentionally excluded so legacy equality
@@ -72,7 +73,7 @@ class AlembicTests(unittest.TestCase):
                 connection.execute(f"DROP INDEX IF EXISTS {constraint}")
             for index in PHASE12_INDEXES:
                 connection.execute(f"DROP INDEX IF EXISTS {index}")
-            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES:
+            for table in PHASE12_TABLES + PHASE13_TABLES + PHASE14_TABLES + PHASE22_TABLES:
                 connection.execute(f"DROP TABLE IF EXISTS {table}")
             connection.execute("DROP TABLE IF EXISTS alembic_version")
             connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
@@ -148,6 +149,7 @@ class AlembicTests(unittest.TestCase):
                 self.assertTrue(set(PHASE12_TABLES).issubset(tables))
                 self.assertTrue(set(PHASE13_TABLES).issubset(tables))
                 self.assertTrue(set(PHASE14_TABLES).issubset(tables))
+                self.assertTrue(set(PHASE22_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
@@ -173,6 +175,13 @@ class AlembicTests(unittest.TestCase):
 
             connection = sqlite3.connect(database_path)
             try:
+                tables = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+                self.assertTrue(set(PHASE22_TABLES).issubset(tables))
                 self.assertEqual(
                     connection.execute("SELECT version_num FROM alembic_version").fetchone(),
                     (CURRENT_HEAD,),
