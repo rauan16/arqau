@@ -41,7 +41,7 @@ PHASE12_CHECK_CONSTRAINTS = ("ck_employments_dates", "ck_salary_profiles_effecti
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
 PHASE14_TABLES = ("audit_logs",)
 PHASE22_TABLES = ("ewa_policies",)
-CURRENT_HEAD = "4b8dc4775b9b"
+CURRENT_HEAD = "5c9e8f1a2b3d"
 
 # Columns that must remain unchanged across Phase 1.3 upgrades. Additive
 # columns (e.g. users.role) are intentionally excluded so legacy equality

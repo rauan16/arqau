@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -36,6 +36,7 @@ class EligibilityReason:
     NO_EWA_POLICY = "NO_EWA_POLICY"
     EWA_DISABLED = "EWA_DISABLED"
     MINIMUM_TENURE_NOT_MET = "MINIMUM_TENURE_NOT_MET"
+    MAX_WITHDRAWALS_EXCEEDED = "MAX_WITHDRAWALS_EXCEEDED"
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,8 @@ class EWAResult:
     minimum_withdrawal_minor: Optional[int] = None
     maximum_withdrawal_minor: Optional[int] = None
     can_request_withdrawal: bool = False
+    max_withdrawals_per_period: Optional[int] = None
+    withdrawals_this_period: int = 0
 
 
 def _get_pay_period(calculation_date: date) -> tuple[date, date]:
@@ -156,32 +159,47 @@ async def _get_ewa_policy(db: AsyncSession, employer_id: str) -> EwaPolicy | Non
 
 async def _get_existing_requests_summary(
     db: AsyncSession, user_id: str, pay_period_start: date, pay_period_end: date
-) -> tuple[int, int]:
-    """Get reserved and paid amounts from existing wage access requests.
+) -> tuple[int, int, int]:
+    """Get reserved amount, paid amount, and withdrawal count from existing wage access requests.
 
     Returns:
-        Tuple of (reserved_amount_minor, paid_amount_minor)
+        Tuple of (reserved_amount_minor, paid_amount_minor, withdrawal_count)
 
-    Note: Phase 2.3 uses legacy status semantics. reserved = pending/approved, paid = paid.
+    Reservation semantics:
+        reserved = pending + approved (financially relevant, consuming capacity)
+        paid = paid (consumes capacity as paid)
+        rejected/cancelled = not consuming capacity
+
+    Withdrawal count includes: pending, approved, paid (financially relevant)
     """
+    # Use pay_period_start and pay_period_end from request if available,
+    # otherwise fall back to created_at range for backward compatibility
     result = await db.execute(
-        select(WageAccessRequest)
-        .where(
+        select(WageAccessRequest).where(
             WageAccessRequest.user_id == user_id,
-            WageAccessRequest.created_at >= pay_period_start,
-            WageAccessRequest.created_at <= pay_period_end,
+            # Filter by pay period if set, otherwise by created_at for legacy rows
+            (WageAccessRequest.pay_period_start.is_not(None) & WageAccessRequest.pay_period_end.is_not(None) &
+             (WageAccessRequest.pay_period_start <= pay_period_end) &
+             (WageAccessRequest.pay_period_end >= pay_period_start)) |
+            (WageAccessRequest.pay_period_start.is_(None) &
+             (WageAccessRequest.created_at >= pay_period_start) &
+             (WageAccessRequest.created_at <= pay_period_end))
         )
     )
     requests = result.scalars().all()
 
     reserved = 0
     paid = 0
+    withdrawal_count = 0
     for req in requests:
         if req.status in ("pending", "approved"):
             reserved += req.amount_minor
+            withdrawal_count += 1
         elif req.status == "paid":
             paid += req.amount_minor
-    return reserved, paid
+            withdrawal_count += 1
+        # rejected, cancelled: not consuming capacity, not counted
+    return reserved, paid, withdrawal_count
 
 
 def _calculate_earned(
@@ -261,6 +279,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=(EligibilityReason.NO_EMPLOYMENT,),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     # 2. Get active employment
@@ -303,6 +323,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=tuple(set(reasons)),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     # 3. Get active salary profile
@@ -320,6 +342,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=(EligibilityReason.NO_ACTIVE_SALARY_PROFILE,),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     # Validate salary
@@ -336,6 +360,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=(EligibilityReason.INVALID_SALARY,),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     # 4. Get EWA policy
@@ -353,6 +379,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=(EligibilityReason.NO_EWA_POLICY,),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     if not policy.enabled:
@@ -368,6 +396,8 @@ async def calculate_ewa(
             calculation_date=calculation_date,
             eligible=False,
             eligibility_reasons=(EligibilityReason.EWA_DISABLED,),
+            max_withdrawals_per_period=None,
+            withdrawals_this_period=0,
         )
 
     # 5. Check minimum tenure
@@ -388,6 +418,8 @@ async def calculate_ewa(
                     calculation_date=calculation_date,
                     eligible=False,
                     eligibility_reasons=(EligibilityReason.MINIMUM_TENURE_NOT_MET,),
+                    max_withdrawals_per_period=None,
+                    withdrawals_this_period=0,
                 )
 
     # 6. Determine pay period
@@ -429,21 +461,43 @@ async def calculate_ewa(
         remaining_salary_cap = max(0, earned_amount_minor - policy.minimum_remaining_salary_minor)
         policy_limit = min(policy_limit, remaining_salary_cap)
 
-    # 9. Get existing requests (reserved/paid)
-    reserved_amount_minor, paid_amount_minor = await _get_existing_requests_summary(
+    # 9. Get existing requests (reserved/paid/count)
+    reserved_amount_minor, paid_amount_minor, withdrawals_this_period = await _get_existing_requests_summary(
         db, user_id, pay_period_start, pay_period_end
     )
 
-    # 10. Calculate available
+    # 10. Check max withdrawals per period
+    if policy.max_withdrawals_per_period is not None:
+        if withdrawals_this_period >= policy.max_withdrawals_per_period:
+            return EWAResult(
+                salary_amount_minor=salary_profile.monthly_salary_amount_minor,
+                earned_amount_minor=earned_amount_minor,
+                policy_limit_minor=policy_limit,
+                reserved_amount_minor=reserved_amount_minor,
+                paid_amount_minor=paid_amount_minor,
+                available_amount_minor=0,
+                pay_period_start=pay_period_start,
+                pay_period_end=pay_period_end,
+                calculation_date=calculation_date,
+                eligible=False,
+                eligibility_reasons=(EligibilityReason.MAX_WITHDRAWALS_EXCEEDED,),
+                minimum_withdrawal_minor=policy.minimum_withdrawal_minor,
+                maximum_withdrawal_minor=policy.maximum_withdrawal_minor,
+                can_request_withdrawal=False,
+                max_withdrawals_per_period=policy.max_withdrawals_per_period,
+                withdrawals_this_period=withdrawals_this_period,
+            )
+
+    # 11. Calculate available
     consumed = reserved_amount_minor + paid_amount_minor
     available_amount_minor = max(0, policy_limit - consumed)
 
-    # 11. Apply maximum withdrawal cap to requestable amount
+    # 12. Apply maximum withdrawal cap to requestable amount
     max_requestable = available_amount_minor
     if policy.maximum_withdrawal_minor is not None:
         max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
 
-    # 12. Check minimum withdrawal
+    # 13. Check minimum withdrawal
     can_request = True
     if policy.minimum_withdrawal_minor is not None and max_requestable < policy.minimum_withdrawal_minor:
         can_request = False
@@ -463,4 +517,6 @@ async def calculate_ewa(
         minimum_withdrawal_minor=policy.minimum_withdrawal_minor,
         maximum_withdrawal_minor=policy.maximum_withdrawal_minor,
         can_request_withdrawal=can_request,
+        max_withdrawals_per_period=policy.max_withdrawals_per_period,
+        withdrawals_this_period=withdrawals_this_period,
     )

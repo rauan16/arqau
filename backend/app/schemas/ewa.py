@@ -27,6 +27,7 @@ class AvailableResponse(BaseModel):
 class WageAccessRequestCreate(BaseModel):
     amount_minor: int
     reason: Optional[str] = None
+    idempotency_key: Optional[str] = None
 
 
 class WageAccessRequestResponse(BaseModel):
@@ -35,7 +36,19 @@ class WageAccessRequestResponse(BaseModel):
     amount_minor: int
     status: str
     reason: Optional[str] = None
-    created_at: str
+    pay_period_start: Optional[str] = None
+    pay_period_end: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    rejected_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    approved_by_user_id: Optional[str] = None
+    rejected_by_user_id: Optional[str] = None
+    cancelled_by_user_id: Optional[str] = None
+    paid_by_user_id: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -104,3 +117,5 @@ class EWAResultResponse(BaseModel):
     minimum_withdrawal_minor: Optional[int] = None
     maximum_withdrawal_minor: Optional[int] = None
     can_request_withdrawal: bool = False
+    max_withdrawals_per_period: Optional[int] = None
+    withdrawals_this_period: int = 0

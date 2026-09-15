@@ -54,7 +54,7 @@ PHASE12_TABLES = ("employers", "employees", "employments", "salary_profiles")
 PHASE13_TABLES = ("refresh_tokens", "employer_admins")
 PHASE14_TABLES = ("audit_logs",)
 PHASE22_TABLES = ("ewa_policies",)
-CURRENT_HEAD = "4b8dc4775b9b"
+CURRENT_HEAD = "5c9e8f1a2b3d"
 
 
 class Phase12MigrationTests(unittest.TestCase):

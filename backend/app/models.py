@@ -34,7 +34,7 @@ class User(Base):
     budgets = relationship("Budget", back_populates="user")
     goals = relationship("Goal", back_populates="user")
     earned_wages = relationship("EarnedWages", back_populates="user", uselist=False)
-    wage_requests = relationship("WageAccessRequest", back_populates="user")
+    wage_requests = relationship("WageAccessRequest", back_populates="user", foreign_keys="WageAccessRequest.user_id")
     employee = relationship("Employee", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     employer_admins = relationship("EmployerAdmin", back_populates="user", cascade="all, delete-orphan")
@@ -127,9 +127,28 @@ class WageAccessRequest(Base):
     amount_minor = Column(Integer, nullable=False)
     status = Column(String, default="pending")
     reason = Column(String, nullable=True)
+    pay_period_start = Column(DateTime, nullable=True)
+    pay_period_end = Column(DateTime, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    approved_by_user_id = Column(String, ForeignKey("users.id", name="fk_wara_approved_by_user_id"), nullable=True)
+    rejected_by_user_id = Column(String, ForeignKey("users.id", name="fk_wara_rejected_by_user_id"), nullable=True)
+    cancelled_by_user_id = Column(String, ForeignKey("users.id", name="fk_wara_cancelled_by_user_id"), nullable=True)
+    paid_by_user_id = Column(String, ForeignKey("users.id", name="fk_wara_paid_by_user_id"), nullable=True)
+    rejection_reason = Column(String, nullable=True)
+    idempotency_key = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship("User", back_populates="wage_requests")
+    user = relationship("User", back_populates="wage_requests", foreign_keys="WageAccessRequest.user_id")
+
+    __table_args__ = (
+        Index("ix_wage_access_requests_user_pay_period", "user_id", "pay_period_start", "pay_period_end"),
+        Index("ix_wage_access_requests_status_created", "status", "created_at"),
+        Index("ix_wage_access_requests_idempotency_key", "idempotency_key", unique=True),
+    )
 
 
 class Employer(Base):
