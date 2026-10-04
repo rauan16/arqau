@@ -58,6 +58,7 @@ class EWAResult:
     can_request_withdrawal: bool = False
     max_withdrawals_per_period: Optional[int] = None
     withdrawals_this_period: int = 0
+    max_requestable_amount_minor: int = 0
 
 
 def _get_pay_period(calculation_date: date) -> tuple[date, date]:
@@ -493,13 +494,13 @@ async def calculate_ewa(
     available_amount_minor = max(0, policy_limit - consumed)
 
     # 12. Apply maximum withdrawal cap to requestable amount
-    max_requestable = available_amount_minor
+    max_requestable_amount_minor = available_amount_minor
     if policy.maximum_withdrawal_minor is not None:
-        max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
+        max_requestable_amount_minor = min(max_requestable_amount_minor, policy.maximum_withdrawal_minor)
 
     # 13. Check minimum withdrawal
     can_request = True
-    if policy.minimum_withdrawal_minor is not None and max_requestable < policy.minimum_withdrawal_minor:
+    if policy.minimum_withdrawal_minor is not None and max_requestable_amount_minor < policy.minimum_withdrawal_minor:
         can_request = False
 
     return EWAResult(
@@ -519,4 +520,5 @@ async def calculate_ewa(
         can_request_withdrawal=can_request,
         max_withdrawals_per_period=policy.max_withdrawals_per_period,
         withdrawals_this_period=withdrawals_this_period,
+        max_requestable_amount_minor=max_requestable_amount_minor,
     )

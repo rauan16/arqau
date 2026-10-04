@@ -126,6 +126,53 @@ class ApiCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+        # Phase 2 withdrawal requests require a real Employee -> Employment
+        # -> SalaryProfile -> EwaPolicy chain; the deterministic engine is the
+        # only authoritative source for new withdrawals.
+        employer = await self.client.post(
+            "/employers/", headers=headers, json={"legal_name": "Acme Corp"}
+        )
+        self.assertEqual(employer.status_code, 200)
+        employer_id = employer.json()["id"]
+
+        employee = await self.client.post(
+            "/employees/", headers=headers, json={"user_id": me.json()["id"]}
+        )
+        self.assertEqual(employee.status_code, 200)
+        employee_id = employee.json()["id"]
+
+        employment = await self.client.post(
+            "/employments/",
+            headers=headers,
+            json={
+                "employee_id": employee_id,
+                "employer_id": employer_id,
+                "start_date": "2026-01-01T00:00:00",
+                "status": "active",
+            },
+        )
+        self.assertEqual(employment.status_code, 200)
+
+        salary = await self.client.post(
+            "/salary-profiles/",
+            headers=headers,
+            json={
+                "employment_id": employment.json()["id"],
+                "currency": "USD",
+                "monthly_salary_amount_minor": 100000,
+                "pay_schedule": "monthly",
+                "effective_from": "2026-01-01T00:00:00",
+            },
+        )
+        self.assertEqual(salary.status_code, 200)
+
+        policy = await self.client.put(
+            f"/employers/{employer_id}/ewa/policy",
+            headers=headers,
+            json={"enabled": True, "max_access_percentage": 50},
+        )
+        self.assertEqual(policy.status_code, 200)
+
         request = await self.client.post(
             "/ewa/request",
             headers=headers,

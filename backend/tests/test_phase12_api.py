@@ -65,7 +65,7 @@ class Phase12ApiTests(unittest.IsolatedAsyncioTestCase):
         return token, user_id
 
     async def test_legacy_auth_onboarding_ewa_finance_and_requests_unchanged(self) -> None:
-        token, _ = await self._token()
+        token, user_id = await self._token()
         headers = {"Authorization": f"Bearer {token}"}
 
         onboarding = await self.client.put(
@@ -85,6 +85,49 @@ class Phase12ApiTests(unittest.IsolatedAsyncioTestCase):
             json={"type": "income", "amount_minor": 6000, "category": "Salary", "merchant": "Employer"},
         )
         self.assertEqual(transaction.status_code, 200)
+
+        # Phase 2 withdrawal requests require a real Employee -> Employment
+        # -> SalaryProfile -> EwaPolicy chain; the deterministic engine is the
+        # only authoritative source for new withdrawals.
+        employer = await self.client.post("/employers/", headers=headers, json={"legal_name": "Acme Corp"})
+        self.assertEqual(employer.status_code, 200)
+        employer_id = employer.json()["id"]
+
+        employee = await self.client.post("/employees/", headers=headers, json={"user_id": user_id})
+        self.assertEqual(employee.status_code, 200)
+        employee_id = employee.json()["id"]
+
+        employment = await self.client.post(
+            "/employments/",
+            headers=headers,
+            json={
+                "employee_id": employee_id,
+                "employer_id": employer_id,
+                "start_date": "2026-01-01T00:00:00",
+                "status": "active",
+            },
+        )
+        self.assertEqual(employment.status_code, 200)
+
+        salary = await self.client.post(
+            "/salary-profiles/",
+            headers=headers,
+            json={
+                "employment_id": employment.json()["id"],
+                "currency": "USD",
+                "monthly_salary_amount_minor": 100000,
+                "pay_schedule": "monthly",
+                "effective_from": "2026-01-01T00:00:00",
+            },
+        )
+        self.assertEqual(salary.status_code, 200)
+
+        policy = await self.client.put(
+            f"/employers/{employer_id}/ewa/policy",
+            headers=headers,
+            json={"enabled": True, "max_access_percentage": 50},
+        )
+        self.assertEqual(policy.status_code, 200)
 
         request = await self.client.post("/ewa/request", headers=headers, json={"amount_minor": 1000, "reason": "Emergency"})
         self.assertEqual(request.status_code, 200)

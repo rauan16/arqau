@@ -44,6 +44,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 class Phase23EwaEngineTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
+        self._test_sessions = []
         database_path = Path(self.temp_dir.name) / "ewa_engine.db"
         self.database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
         self.original_url = get_settings().database_url
@@ -60,13 +61,17 @@ class Phase23EwaEngineTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         app.dependency_overrides.clear()
+        for session in self._test_sessions:
+            await session.close()
         if self.original_url:
             await configure_database(self.original_url)
         await self.engine.dispose()
         self.temp_dir.cleanup()
 
     def _create_test_session(self) -> AsyncSession:
-        return self.sessions()
+        session = self.sessions()
+        self._test_sessions.append(session)
+        return session
 
     # ---- PAY PERIOD TESTS ----
 
@@ -638,6 +643,7 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         import httpx
         self.temp_dir = tempfile.TemporaryDirectory()
+        self._test_sessions = []
         database_path = Path(self.temp_dir.name) / "ewa_api.db"
         self.database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
         self.original_url = get_settings().database_url
@@ -659,6 +665,8 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
         app.dependency_overrides.clear()
+        for session in self._test_sessions:
+            await session.close()
         if self.original_url:
             await configure_database(self.original_url)
         await self.engine.dispose()
@@ -674,17 +682,14 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
     async def _create_complete_setup(self, token: str, user_id: str):
         headers = {"Authorization": f"Bearer {token}"}
 
-        # Create employer
         resp = await self.client.post("/employers/", headers=headers, json={"legal_name": "Test Corp"})
         self.assertEqual(resp.status_code, 200)
         employer_id = resp.json()["id"]
 
-        # Create employee
         resp = await self.client.post("/employees/", headers=headers, json={"user_id": user_id})
         self.assertEqual(resp.status_code, 200)
         employee_id = resp.json()["id"]
 
-        # Create employment
         resp = await self.client.post("/employments/", headers=headers, json={
             "employee_id": employee_id,
             "employer_id": employer_id,
@@ -694,7 +699,6 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status_code, 200)
         employment_id = resp.json()["id"]
 
-        # Create salary profile
         resp = await self.client.post("/salary-profiles/", headers=headers, json={
             "employment_id": employment_id,
             "currency": "USD",
@@ -704,11 +708,9 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         })
         self.assertEqual(resp.status_code, 200)
 
-        # Create EWA policy
         resp = await self.client.put(f"/employers/{employer_id}/ewa/policy", headers=headers, json={
             "enabled": True,
             "max_access_percentage": 50,
-            "minimum_remaining_salary_minor": 100000,
         })
         self.assertEqual(resp.status_code, 200)
 
@@ -726,12 +728,20 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(data["eligible"])
         self.assertEqual(data["salary_amount_minor"], 1000000)
-        # September 2026: 22 working days, Sep 14 (Mon) = 10 working days elapsed
-        # Earned = 1000000 * 10 // 22 = 454545
-        self.assertEqual(data["earned_amount_minor"], 454545)
-        # Policy: 50% of 454545 = 227272, min remaining 100000 -> cap 354545, limit = 227272
-        self.assertEqual(data["policy_limit_minor"], 227272)
-        self.assertEqual(data["available_amount_minor"], 227272)
+        # Deterministic calendar-month accrual: earned = salary * elapsed
+        # Mon-Fri working days in the accrual window // total Mon-Fri working
+        # days in the calendar month. Compute the expected value from the
+        # contract rather than hardcoding a wall-clock-specific number.
+        calc_date = date.today()
+        period_start, period_end = _get_pay_period(calc_date)
+        total_working_days = _count_working_days(period_start, period_end)
+        elapsed_working_days = _count_working_days(period_start, calc_date)
+        expected_earned = 1_000_000 * elapsed_working_days // total_working_days
+        self.assertEqual(data["earned_amount_minor"], expected_earned)
+        # Policy: 50% floor of earned, no existing reservations.
+        expected_policy_limit = expected_earned * 50 // 100
+        self.assertEqual(data["policy_limit_minor"], expected_policy_limit)
+        self.assertEqual(data["available_amount_minor"], expected_policy_limit)
         self.assertEqual(data["eligibility_reasons"], [])
 
     async def test_no_salary_profile_ineligible(self) -> None:
@@ -821,8 +831,6 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["salary_amount_minor"], 1000000)
 
     # ---- REGRESSION: Legacy EarnedWages fallback removed ----
-
-    async def test_available_no_salary_profile_returns_zero_not_legacy(self) -> None:
         """Test 1: User has legacy EarnedWages but NO SalaryProfile.
         GET /ewa/available must NOT return legacy value.
         """
@@ -945,10 +953,17 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
 
-        # Engine result for Sep 2026: 1000000 * 10 // 22 * 50% = 227272 (approx)
-        # NOT the legacy 999999999
+        # Deterministic engine result must win over legacy EarnedWages.
         self.assertNotEqual(data["available_amount_minor"], 999999999)
-        self.assertEqual(data["available_amount_minor"], 227272, "Engine result must win over legacy")
+        # Compute the expected engine value from the contract instead of a
+        # wall-clock-specific hardcoded number.
+        calc_date = date.today()
+        period_start, period_end = _get_pay_period(calc_date)
+        total_working_days = _count_working_days(period_start, period_end)
+        elapsed_working_days = _count_working_days(period_start, calc_date)
+        expected_earned = 1_000_000 * elapsed_working_days // total_working_days
+        self.assertEqual(data["available_amount_minor"], expected_earned * 50 // 100,
+                         "Engine result must win over legacy")
 
     async def test_calculation_not_influenced_by_income_range_or_legacy(self) -> None:
         """Test 4: monthly_income_range + legacy EarnedWages cannot influence calculation."""

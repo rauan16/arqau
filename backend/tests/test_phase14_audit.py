@@ -15,6 +15,7 @@ from app.database import get_db
 from app.main import app
 from app.models import AuditLog
 from app.services.audit_service import (
+    EWA_POLICY_CREATED,
     EMPLOYEE_CREATED,
     EMPLOYER_ADMIN_ASSIGNED,
     EMPLOYER_CREATED,
@@ -93,6 +94,15 @@ class Phase14AuditTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["id"]
+
+    async def _create_ewa_policy(self, token: str, employer_id: str) -> None:
+        """Authoritative EWA policy required before any withdrawal request."""
+        response = await self.client.put(
+            f"/employers/{employer_id}/ewa/policy",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"enabled": True, "max_access_percentage": 50},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
 
     async def _create_employee(self, token: str, user_id: str) -> str:
         response = await self.client.post(
@@ -284,6 +294,9 @@ class Phase14AuditTests(unittest.IsolatedAsyncioTestCase):
         )
         salary_id = await self._create_salary(super_token, employment_id)
         await self._update_salary(super_token, salary_id, 125_000)
+        # The deterministic EWA engine requires an EWA policy for the
+        # employer before any withdrawal request can be created.
+        await self._create_ewa_policy(super_token, employer_id)
 
         finance_user = await self._register("finance-worker@audit.example.com", name="Finance Worker")
         await self._assign_admin(super_token, finance_user["user_id"], employer_id)
@@ -303,6 +316,7 @@ class Phase14AuditTests(unittest.IsolatedAsyncioTestCase):
             SALARY_PROFILE_UPDATED,
             USER_ROLE_CHANGED,
             EMPLOYER_ADMIN_ASSIGNED,
+            EWA_POLICY_CREATED,
             USER_REQUESTED_WITHDRAWAL,
         }
         self.assertTrue(required_actions.issubset(by_action), required_actions - set(by_action))
@@ -343,9 +357,16 @@ class Phase14AuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(admin_event.entity_type, "employer_admin")
         self.assertEqual(admin_event.details["user_id"], finance_user["user_id"])
 
+        policy_event = by_action[EWA_POLICY_CREATED][0]
+        self.assertEqual(policy_event.actor_user_id, super_user["user_id"])
+        self.assertEqual(policy_event.employer_id, employer_id)
+        self.assertEqual(policy_event.entity_type, "ewa_policy")
+
         withdrawal_event = by_action[USER_REQUESTED_WITHDRAWAL][0]
         self.assertEqual(withdrawal_event.actor_user_id, employee_user["user_id"])
-        self.assertIsNone(withdrawal_event.employer_id)
+        # The authoritative withdrawal path binds the request to the employee's
+        # real employment/employer, so the audit row carries that employer_id.
+        self.assertEqual(withdrawal_event.employer_id, employer_id)
         self.assertEqual(withdrawal_event.details["amount_minor"], 1_000)
 
         forbidden_values = {

@@ -1,4 +1,4 @@
-"""Admin-only role and employer-membership management endpoints.
+﻿"""Admin-only role and employer-membership management endpoints.
 
 These exist so RBAC can be provisioned and tested via the API. They are
 restricted to super_admin.
@@ -6,6 +6,7 @@ restricted to super_admin.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from pydantic import BaseModel
 

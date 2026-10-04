@@ -36,8 +36,8 @@ class WageAccessRequestResponse(BaseModel):
     amount_minor: int
     status: str
     reason: Optional[str] = None
-    pay_period_start: Optional[str] = None
-    pay_period_end: Optional[str] = None
+    pay_period_start: Optional[datetime] = None
+    pay_period_end: Optional[datetime] = None
     approved_at: Optional[datetime] = None
     rejected_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
@@ -119,3 +119,4 @@ class EWAResultResponse(BaseModel):
     can_request_withdrawal: bool = False
     max_withdrawals_per_period: Optional[int] = None
     withdrawals_this_period: int = 0
+    max_requestable_amount_minor: int = 0

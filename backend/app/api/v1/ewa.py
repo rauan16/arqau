@@ -132,6 +132,7 @@ async def get_calculation(current_user: User = Depends(get_current_user), db: As
         can_request_withdrawal=calc.can_request_withdrawal,
         max_withdrawals_per_period=calc.max_withdrawals_per_period,
         withdrawals_this_period=calc.withdrawals_this_period,
+        max_requestable_amount_minor=calc.max_requestable_amount_minor,
     )
 
 
@@ -215,98 +216,74 @@ async def create_request(data: WageAccessRequestCreate, current_user: User = Dep
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Idempotency key conflict")
             return WageAccessRequestResponse.model_validate(existing)
 
-    # Resolve employment and policy
+    # Resolve employment and policy. The authoritative path requires a real
+    # Employee -> Employment -> SalaryProfile -> EwaPolicy chain; if any piece
+    # is missing the request fails closed. Legacy EarnedWages rows are kept
+    # for history/compatibility but are never authoritative for new withdrawals.
     employment, policy, employee = await _resolve_employment_and_policy(db, current_user.id)
+
+    if not employment or not policy or not policy.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active employment or EWA policy",
+        )
 
     # Primary path: authoritative deterministic EWA engine backed by real
     # Employee/Employment/SalaryProfile/EwaPolicy data.
-    if employment and policy and policy.enabled:
-        # Recompute EWA result server-side
-        calc = await calculate_ewa(db, current_user.id)
-        if calc.eligible:
+    # Recompute EWA result server-side
+    calc = await calculate_ewa(db, current_user.id)
+    if not calc.eligible:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not eligible for earned wage access",
+        )
             # Validate amount against maximum requestable
-            max_requestable = calc.available_amount_minor
-            if policy.maximum_withdrawal_minor is not None:
-                max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
+    max_requestable = calc.available_amount_minor
+    if policy.maximum_withdrawal_minor is not None:
+        max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
 
-            if data.amount_minor > max_requestable:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Amount exceeds maximum requestable of {max_requestable}",
-                )
+    if data.amount_minor > max_requestable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Amount exceeds maximum requestable of {max_requestable}",
+        )
 
-            # Validate minimum withdrawal
-            if policy.minimum_withdrawal_minor is not None and data.amount_minor < policy.minimum_withdrawal_minor:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Amount below minimum withdrawal of {policy.minimum_withdrawal_minor}",
-                )
+    # Validate minimum withdrawal
+    if policy.minimum_withdrawal_minor is not None and data.amount_minor < policy.minimum_withdrawal_minor:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Amount below minimum withdrawal of {policy.minimum_withdrawal_minor}",
+        )
 
-            # Concurrency safety: lock the employment row to serialize requests for this employment
-            # This prevents two concurrent requests from both seeing the same available capacity
-            await db.execute(
-                select(Employment)
-                .where(Employment.id == employment.id)
-                .with_for_update(nowait=True)
-            )
+    # Concurrency safety: lock the employment row to serialize requests for this employment
+    # This prevents two concurrent requests from both seeing the same available capacity
+    await db.execute(
+        select(Employment)
+        .where(Employment.id == employment.id)
+        .with_for_update(nowait=True)
+    )
 
-            # Re-validate availability after acquiring lock (recompute inside transaction)
-            calc = await calculate_ewa(db, current_user.id)
-            max_requestable = calc.available_amount_minor
-            if policy.maximum_withdrawal_minor is not None:
-                max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
+    # Re-validate availability after acquiring lock (recompute inside transaction)
+    calc = await calculate_ewa(db, current_user.id)
+    max_requestable = calc.available_amount_minor
+    if policy.maximum_withdrawal_minor is not None:
+        max_requestable = min(max_requestable, policy.maximum_withdrawal_minor)
 
-            if data.amount_minor > max_requestable:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Amount exceeds available capacity after concurrency check ({max_requestable})",
-                )
+    if data.amount_minor > max_requestable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Amount exceeds available capacity after concurrency check ({max_requestable})",
+        )
 
-            # Create pending request with pay-period binding
-            req = WageAccessRequest(
-                id=str(uuid.uuid4()),
-                user_id=current_user.id,
-                amount_minor=data.amount_minor,
-                reason=data.reason,
-                status="pending",
-                pay_period_start=calc.pay_period_start,
-                pay_period_end=calc.pay_period_end,
-                idempotency_key=data.idempotency_key,
-            )
-            db.add(req)
-
-            await record_audit_event(
-                db,
-                actor_user_id=current_user.id,
-                employer_id=employment.employer_id,
-                action=USER_REQUESTED_WITHDRAWAL,
-                entity_type="wage_access_request",
-                entity_id=req.id,
-                metadata={"user_id": current_user.id, "amount_minor": data.amount_minor},
-            )
-
-            await db.commit()
-            await db.refresh(req)
-            return WageAccessRequestResponse.model_validate(req)
-
-    # Legacy fallback: no real employment/policy is configured, or the
-    # deterministic engine is not eligible. Use the legacy EarnedWages ledger
-    # (available_amount_minor) as the source of truth so existing API contracts
-    # and tests that predate the Phase 2.3 engine keep working.
-    result = await db.execute(select(EarnedWages).where(EarnedWages.user_id == current_user.id))
-    ew = result.scalar_one_or_none()
-    if not ew:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No earned wages set. Set earned wages first.")
-    available = ew.available_amount_minor
-    if data.amount_minor > available:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Amount exceeds available balance of {available} ?")
-
+    # Create pending request with pay-period binding
     req = WageAccessRequest(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
         amount_minor=data.amount_minor,
         reason=data.reason,
         status="pending",
+        pay_period_start=calc.pay_period_start,
+        pay_period_end=calc.pay_period_end,
         idempotency_key=data.idempotency_key,
     )
     db.add(req)
@@ -314,15 +291,12 @@ async def create_request(data: WageAccessRequestCreate, current_user: User = Dep
     await record_audit_event(
         db,
         actor_user_id=current_user.id,
-        employer_id=None,
+        employer_id=employment.employer_id,
         action=USER_REQUESTED_WITHDRAWAL,
         entity_type="wage_access_request",
         entity_id=req.id,
         metadata={"user_id": current_user.id, "amount_minor": data.amount_minor},
     )
-
-    ew.accessed_amount_minor += data.amount_minor
-    ew.available_amount_minor = calculate_available(ew.earned_amount_minor, ew.accessed_amount_minor)
 
     await db.commit()
     await db.refresh(req)
