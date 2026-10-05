@@ -44,6 +44,7 @@ from app.services.financial_context_service import (
     analyze_withdrawal_from_context,
     build_financial_context,
 )
+from app.services.ai_service import log_provider_error
 
 logger = logging.getLogger("arqau.ai_decision")
 
@@ -502,19 +503,21 @@ async def generate_decision(
     try:
         raw = await provider.generate_decision(payload)
     except APITimeoutError as exc:
-        logger.warning("AI decision timed out: %s", str(exc)[:200])
+        log_provider_error(
+            "ai_decision", exc, provider=provider_name, model=provider_model,
+            extra={"timeout": AI_TIMEOUT_SECONDS},
+        )
         return build_fallback_decision(analysis, provider_name, provider_model)
     except (APIConnectionError, RateLimitError, APIStatusError) as exc:
-        status = getattr(exc, "status_code", None)
-        logger.warning(
-            "AI decision provider error: type=%s status=%s detail=%s",
-            type(exc).__name__,
-            status,
-            str(exc)[:200],
+        log_provider_error(
+            "ai_decision", exc, provider=provider_name, model=provider_model,
+            extra={"status_code": getattr(exc, "status_code", None)},
         )
         return build_fallback_decision(analysis, provider_name, provider_model)
     except Exception as exc:  # noqa: BLE001 - any provider failure -> fallback
-        logger.warning("AI decision unexpected error: %s=%s", type(exc).__name__, str(exc)[:200])
+        log_provider_error(
+            "ai_decision", exc, provider=provider_name, model=provider_model
+        )
         return build_fallback_decision(analysis, provider_name, provider_model)
 
     if not isinstance(raw, dict):
