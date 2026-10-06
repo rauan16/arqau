@@ -18,6 +18,7 @@ deterministic fallback is used so financial analysis remains available.
 
 from __future__ import annotations
 
+import httpx
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -48,8 +49,9 @@ from app.services.ai_service import log_provider_error
 
 logger = logging.getLogger("arqau.ai_decision")
 
-# Reuses the existing 30s precedent from the legacy ai_service.
-AI_TIMEOUT_SECONDS = 30.0
+# Decision is less latency-sensitive but still bounded.
+# connect=5s, read=20s, write=10s, pool=5s. No retries.
+DECISION_TIMEOUT = httpx.Timeout(connect=5.0, read=20.0, write=10.0, pool=5.0)
 
 DEFAULT_DISCLAIMER = (
     "This is illustrative guidance, not financial advice. ARQAU does not "
@@ -142,16 +144,20 @@ class DecisionAIProvider(ABC):
 class OpenAIDecisionProvider(DecisionAIProvider):
     """Production provider backed by the existing OpenAI/OpenRouter config.
 
-    Reuses `app.config.get_settings` for API key, model, and the 30s timeout
-    precedent. Does NOT reuse the legacy unsafe prompt/calculation logic in
+    Reuses `app.config.get_settings` for API key, model, and the structured
+    timeout. Does NOT reuse the legacy unsafe prompt/calculation logic in
     `ai_service.build_withdrawal_prompt` / `ai_service.analyze_withdrawal`.
+
+    Uses `max_retries=0` and a structured timeout (connect=5s, read=20s,
+    write=10s, pool=5s) to bound worst-case latency and fail fast to the
+    deterministic fallback.
     """
 
     def __init__(
         self,
         api_key: str,
         model: str,
-        timeout: float = AI_TIMEOUT_SECONDS,
+        timeout: httpx.Timeout = DECISION_TIMEOUT,
     ) -> None:
         self._api_key = api_key or ""
         self._model = model
@@ -171,7 +177,11 @@ class OpenAIDecisionProvider(DecisionAIProvider):
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
             api_key = self._api_key
-            client_kwargs: dict[str, Any] = {"api_key": api_key, "timeout": self._timeout}
+            client_kwargs: dict[str, Any] = {
+                "api_key": api_key,
+                "timeout": self._timeout,
+                "max_retries": 0,
+            }
             if api_key.startswith("sk-or-"):
                 client_kwargs["base_url"] = "https://openrouter.ai/api/v1"
             self._client = AsyncOpenAI(**client_kwargs)
@@ -240,7 +250,7 @@ def _build_production_provider() -> DecisionAIProvider:
     return OpenAIDecisionProvider(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
-        timeout=AI_TIMEOUT_SECONDS,
+        timeout=DECISION_TIMEOUT,
     )
 
 
@@ -505,7 +515,7 @@ async def generate_decision(
     except APITimeoutError as exc:
         log_provider_error(
             "ai_decision", exc, provider=provider_name, model=provider_model,
-            extra={"timeout": AI_TIMEOUT_SECONDS},
+            extra={"timeout": str(DECISION_TIMEOUT)},
         )
         return build_fallback_decision(analysis, provider_name, provider_model)
     except (APIConnectionError, RateLimitError, APIStatusError) as exc:

@@ -25,6 +25,7 @@ Read-only:
 
 from __future__ import annotations
 
+import httpx
 import json
 import logging
 import re
@@ -63,8 +64,9 @@ from app.services.financial_context_service import (
 
 logger = logging.getLogger("arqau.ai_copilot")
 
-# Matches the 30s precedent already used by the Phase 3.3 decision layer.
-AI_TIMEOUT_SECONDS = 30.0
+# Copilot is interactive: fail fast to deterministic fallback.
+# connect=5s, read=20s, write=10s, pool=5s. No retries.
+COPILOT_TIMEOUT = httpx.Timeout(connect=5.0, read=20.0, write=10.0, pool=5.0)
 
 DEFAULT_DISCLAIMER = (
     "This is illustrative guidance, not financial advice. ARQAU does not "
@@ -228,13 +230,17 @@ class OpenAICopilotProvider(CopilotProvider):
     The client is constructed lazily on first use, so importing the FastAPI
     app never requires an API key. Only the `json_schema` of `CopilotContent`
     is disclosed to the model.
+
+    Uses `max_retries=0` and a structured timeout (connect=5s, read=20s,
+    write=10s, pool=5s) to bound worst-case latency and fail fast to the
+    deterministic fallback.
     """
 
     def __init__(
         self,
         api_key: str,
         model: str,
-        timeout: float = AI_TIMEOUT_SECONDS,
+        timeout: httpx.Timeout = COPILOT_TIMEOUT,
     ) -> None:
         self._api_key = (api_key or "").strip()
         self._model = model
@@ -262,6 +268,7 @@ class OpenAICopilotProvider(CopilotProvider):
             client_kwargs: dict[str, Any] = {
                 "api_key": self._api_key,
                 "timeout": self._timeout,
+                "max_retries": 0,
             }
             if self._api_key.startswith("sk-or-"):
                 client_kwargs["base_url"] = "https://openrouter.ai/api/v1"
@@ -342,7 +349,7 @@ def _build_production_provider() -> CopilotProvider:
     return OpenAICopilotProvider(
         api_key=settings.openai_api_key,
         model=settings.openai_model,
-        timeout=AI_TIMEOUT_SECONDS,
+        timeout=COPILOT_TIMEOUT,
     )
 
 
@@ -1117,7 +1124,7 @@ async def generate_copilot_answer(
     except APITimeoutError as exc:
         log_provider_error(
             "copilot", exc, provider=provider_name, model=provider_model,
-            extra={"timeout": AI_TIMEOUT_SECONDS},
+            extra={"timeout": str(COPILOT_TIMEOUT)},
         )
         return fallback(FALLBACK_TIMEOUT)
     except RateLimitError as exc:

@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import select
+from unittest.mock import patch
 
 from app.core.database import Base, configure_database, create_database
 from app.config import get_settings
@@ -38,8 +39,11 @@ from app.schemas.ai_decision import (
     WithdrawalDecisionResponse,
 )
 from app.services.ai_decision import (
+    DECISION_TIMEOUT,
     FakeDecisionProvider,
     DecisionAIProvider,
+    OpenAIDecisionProvider,
+    generate_decision,
     get_decision_provider,
     make_withdrawal_decision,
     build_sanitized_input,
@@ -821,6 +825,124 @@ FIELD_ALLOWLIST = (
     "has_goals",
     "unavailable_analysis",
 )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.5.1 — Provider resilience policy (explicit timeout + retries).
+# ---------------------------------------------------------------------------
+# These tests verify the *production* provider construction and retry policy
+# directly. They do not exercise real network calls: the client is inspected
+# via mocks, and every failure path is served by a deterministic fake.
+# ---------------------------------------------------------------------------
+
+
+class TestP351_ProviderPolicy(unittest.IsolatedAsyncioTestCase):
+    """Explicit structured timeout and max_retries on the production provider."""
+
+    def test_P1_decision_provider_passes_explicit_structured_timeout(self) -> None:
+        provider = OpenAIDecisionProvider(api_key="sk-test", model="gpt-4o-mini")
+        self.assertIs(provider._timeout, DECISION_TIMEOUT)
+        self.assertEqual(provider._timeout.connect, 5.0)
+        self.assertEqual(provider._timeout.read, 20.0)
+        self.assertEqual(provider._timeout.write, 10.0)
+        self.assertEqual(provider._timeout.pool, 5.0)
+
+    def test_P2_decision_provider_passes_explicit_max_retries(self) -> None:
+        provider = OpenAIDecisionProvider(api_key="sk-test", model="gpt-4o-mini")
+        client = provider._get_client()
+        self.assertEqual(client.max_retries, 0)
+
+    def test_P3_decision_client_is_cached(self) -> None:
+        provider = OpenAIDecisionProvider(api_key="sk-test", model="gpt-4o-mini")
+        first = provider._get_client()
+        second = provider._get_client()
+        self.assertIs(first, second)
+
+    def test_P4_decision_openrouter_routes_via_base_url(self) -> None:
+        provider = OpenAIDecisionProvider(api_key="sk-or-test", model="gpt-4o-mini")
+        client = provider._get_client()
+        self.assertEqual(str(client.base_url), "https://openrouter.ai/api/v1/")
+
+    def test_P5_decision_timeout_constant_is_structured(self) -> None:
+        self.assertIsInstance(DECISION_TIMEOUT, httpx.Timeout)
+        self.assertEqual(DECISION_TIMEOUT.connect, 5.0)
+        self.assertEqual(DECISION_TIMEOUT.read, 20.0)
+        self.assertEqual(DECISION_TIMEOUT.write, 10.0)
+        self.assertEqual(DECISION_TIMEOUT.pool, 5.0)
+
+    def test_P6_decision_no_custom_retry_loop_on_guard_rejection(self) -> None:
+        # A schema-invalid response is a deterministic rejection: the provider
+        # must not be retried. The fake raises once; a retry loop would call it
+        # again and would be visible in call_count.
+        fake = FakeDecisionProvider(response={"summary": "x"})
+        with patch.object(
+            DecisionContent, "model_validate", side_effect=ValueError("bad")
+        ):
+            decision = asyncio_run(
+                generate_decision(fake, {"requested_amount_minor": 100}, _stub_analysis())
+            )
+        self.assertEqual(fake.call_count, 1)
+        self.assertTrue(decision.ai_metadata.fallback_used)
+
+
+def _stub_analysis():
+    from app.schemas.financial_context import (
+        CurrentState,
+        Impact,
+        Requestability,
+        WithdrawalAnalysis,
+        WithdrawalFrequency,
+        BudgetImpact,
+        DataQualityAnalysis,
+    )
+
+    return WithdrawalAnalysis(
+        requested_amount_minor=100,
+        requestability=Requestability(
+            requestable=True,
+            blocking_reasons=[],
+            authoritative_eligibility_reasons=[],
+        ),
+        current_state=CurrentState(
+            salary_amount_minor=200000,
+            earned_amount_minor=200000,
+            policy_limit_minor=100000,
+            reserved_amount_minor=0,
+            paid_amount_minor=0,
+            available_amount_minor=100000,
+            max_requestable_amount_minor=100000,
+        ),
+        impact=Impact(
+            remaining_available_amount_minor=99900,
+            remaining_max_requestable_amount_minor=99900,
+            requested_share_of_earned_bps=50,
+            requested_share_of_policy_limit_bps=100,
+            exposure_before_minor=0,
+            exposure_after_minor=100,
+            exposure_share_of_earned_before_bps=0,
+            exposure_share_of_earned_after_bps=50,
+        ),
+        withdrawal_frequency=WithdrawalFrequency(
+            withdrawals_this_period=0,
+            max_withdrawals_per_period=3,
+            remaining_slots_before=3,
+            remaining_slots_after=2,
+        ),
+        budget_impact=BudgetImpact(available=False),
+        data_quality=DataQualityAnalysis(
+            has_transactions=True,
+            has_budget=True,
+            has_goals=True,
+            unavailable_analysis=None,
+        ),
+        snapshot_only=True,
+    )
+
+
+def asyncio_run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
 
 
 if __name__ == "__main__":

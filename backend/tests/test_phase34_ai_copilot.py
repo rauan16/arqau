@@ -54,9 +54,11 @@ from app.schemas.ai_decision import WithdrawalDecisionResponse
 from app.schemas.financial_context import WithdrawalAnalysis
 from app.services.ai_copilot import (
     AVAILABILITY_NOTE,
+    COPILOT_TIMEOUT,
     COPILOT_FIELD_ALLOWLIST,
     DEFAULT_DISCLAIMER,
     FALLBACK_CONNECTION,
+    FALLBACK_HTTP_ERROR,
     FALLBACK_MALFORMED,
     FALLBACK_NOT_CONFIGURED,
     FALLBACK_RATE_LIMIT,
@@ -72,6 +74,7 @@ from app.services.ai_copilot import (
     contains_forbidden_claim,
     contains_forbidden_recommendation,
     find_unsupported_amount,
+    generate_copilot_answer,
     get_copilot_provider,
     reset_production_provider,
     sanitize_provider_payload,
@@ -1413,6 +1416,126 @@ class TestO_GuardUnits(Phase34CopilotTestCase):
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertEqual(messages[0]["content"], SYSTEM_PROMPT)
         self.assertIn("hello", messages[1]["content"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.5.1 — Provider resilience policy (explicit timeout + retries).
+# ---------------------------------------------------------------------------
+# Verifies the production provider construction and retry policy directly.
+# No network calls: the client is inspected via mocks, and every failure path
+# is served by a deterministic fake.
+# ---------------------------------------------------------------------------
+
+
+class TestP351_CopilotProviderPolicy(unittest.IsolatedAsyncioTestCase):
+    """Explicit structured timeout and max_retries on the production provider."""
+
+    def test_P1_copilot_provider_passes_explicit_structured_timeout(self) -> None:
+        provider = OpenAICopilotProvider(api_key="sk-test", model="gpt-4o-mini")
+        self.assertIs(provider._timeout, COPILOT_TIMEOUT)
+        self.assertEqual(provider._timeout.connect, 5.0)
+        self.assertEqual(provider._timeout.read, 20.0)
+        self.assertEqual(provider._timeout.write, 10.0)
+        self.assertEqual(provider._timeout.pool, 5.0)
+
+    def test_P2_copilot_provider_passes_explicit_max_retries(self) -> None:
+        provider = OpenAICopilotProvider(api_key="sk-test", model="gpt-4o-mini")
+        client = provider._get_client()
+        self.assertEqual(client.max_retries, 0)
+
+    def test_P3_copilot_client_is_cached(self) -> None:
+        provider = OpenAICopilotProvider(api_key="sk-test", model="gpt-4o-mini")
+        first = provider._get_client()
+        second = provider._get_client()
+        self.assertIs(first, second)
+
+    def test_P4_copilot_openrouter_routes_via_base_url(self) -> None:
+        provider = OpenAICopilotProvider(api_key="sk-or-test", model="gpt-4o-mini")
+        client = provider._get_client()
+        self.assertEqual(str(client.base_url), "https://openrouter.ai/api/v1/")
+
+    def test_P5_copilot_timeout_constant_is_structured(self) -> None:
+        self.assertIsInstance(COPILOT_TIMEOUT, httpx.Timeout)
+        self.assertEqual(COPILOT_TIMEOUT.connect, 5.0)
+        self.assertEqual(COPILOT_TIMEOUT.read, 20.0)
+        self.assertEqual(COPILOT_TIMEOUT.write, 10.0)
+        self.assertEqual(COPILOT_TIMEOUT.pool, 5.0)
+
+    def test_P6_copilot_no_custom_retry_loop_on_guard_rejection(self) -> None:
+        # A guard-rejected response is a deterministic rejection: the provider
+        # must not be retried. The fake raises once; a retry loop would call it
+        # again and would be visible in call_count.
+        fake = FakeCopilotProvider(response=SAFE_CONTENT)
+        with patch.object(
+            CopilotContent, "model_validate", side_effect=ValueError("bad")
+        ):
+            answer = asyncio_run(
+                generate_copilot_answer(
+                    fake, {"available_amount_minor": 1}, _stub_facts(), "hello"
+                )
+            )
+        self.assertEqual(fake.call_count, 1)
+        self.assertTrue(answer.ai_metadata.fallback_used)
+        self.assertEqual(answer.ai_metadata.fallback_reason, FALLBACK_SCHEMA_INVALID)
+
+    def test_P7_copilot_response_never_contains_raw_exception_text(self) -> None:
+        # Raw provider exception text must never reach the client. The fallback
+        # reason is a stable code, not the exception message.
+        fake = FakeCopilotProvider(exc=RuntimeError("boom: sk-or-secret-key-12345"))
+        answer = asyncio_run(
+            generate_copilot_answer(
+                fake, {"available_amount_minor": 1}, _stub_facts(), "hello"
+            )
+        )
+        payload = answer.model_dump()
+        self.assertIn(answer.ai_metadata.fallback_reason, (
+            FALLBACK_TIMEOUT, FALLBACK_CONNECTION, FALLBACK_RATE_LIMIT,
+            FALLBACK_HTTP_ERROR, FALLBACK_MALFORMED,
+        ))
+        for value in _flatten(payload):
+            self.assertNotIn("sk-or-secret-key-12345", str(value))
+            self.assertNotIn("boom:", str(value))
+            self.assertNotIn("RuntimeError", str(value))
+
+
+def _stub_facts():
+    return AuthoritativeCopilotFacts(
+        earned_amount_minor=200000,
+        available_amount_minor=100000,
+        max_requestable_amount_minor=100000,
+        reserved_amount_minor=0,
+        paid_amount_minor=0,
+        withdrawals_this_period=0,
+        max_withdrawals_per_period=3,
+        total_spending_minor=0,
+        transaction_count=0,
+        budget_available=False,
+        goals_available=False,
+        has_salary_profile=True,
+        has_ewa_policy=True,
+        has_transactions=True,
+        has_budget=False,
+        has_goals=False,
+        missing_data=[],
+        availability_note=AVAILABILITY_NOTE,
+    )
+
+
+def _flatten(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _flatten(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _flatten(item)
+    else:
+        yield value
+
+
+def asyncio_run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
 
 
 if __name__ == "__main__":
