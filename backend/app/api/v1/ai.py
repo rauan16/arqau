@@ -37,14 +37,21 @@ from app.services.ai_decision import (
     get_decision_provider,
     make_withdrawal_decision,
 )
+from app.core.rate_limit import enforce_total_ceiling
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+async def _require_ai_request(current_user: User = Depends(get_current_user)) -> User:
+    """Enforce total AI request ceiling (Tier 2)."""
+    await enforce_total_ceiling(str(current_user.id))
+    return current_user
 
 
 @router.post("/chat", response_model=CopilotResponse)
 async def chat_endpoint(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_ai_request),
     db: AsyncSession = Depends(get_db),
     provider: CopilotProvider = Depends(get_copilot_provider),
     calculation_date: Optional[date] = None,
@@ -104,7 +111,7 @@ def _extract_withdrawal_amount(payload: dict[str, Any]) -> int:
 )
 async def analyze_withdrawal_endpoint(
     request: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_ai_request),
     db: AsyncSession = Depends(get_db),
     provider: DecisionAIProvider = Depends(get_decision_provider),
     calculation_date: Optional[date] = None,

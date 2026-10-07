@@ -1471,7 +1471,7 @@ class TestP351_CopilotProviderPolicy(unittest.IsolatedAsyncioTestCase):
         ):
             answer = asyncio_run(
                 generate_copilot_answer(
-                    fake, {"available_amount_minor": 1}, _stub_facts(), "hello"
+                    fake, {"available_amount_minor": 1}, _stub_facts(), "hello", "test-user"
                 )
             )
         self.assertEqual(fake.call_count, 1)
@@ -1484,7 +1484,7 @@ class TestP351_CopilotProviderPolicy(unittest.IsolatedAsyncioTestCase):
         fake = FakeCopilotProvider(exc=RuntimeError("boom: sk-or-secret-key-12345"))
         answer = asyncio_run(
             generate_copilot_answer(
-                fake, {"available_amount_minor": 1}, _stub_facts(), "hello"
+                fake, {"available_amount_minor": 1}, _stub_facts(), "hello", "test-user"
             )
         )
         payload = answer.model_dump()

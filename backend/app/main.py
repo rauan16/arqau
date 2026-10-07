@@ -5,6 +5,7 @@ from app.config import get_settings
 from app import database
 from app.models import Base
 from app.api.v1 import api_router
+from app.core.body_limit import BodyLimitMiddleware
 
 settings = get_settings()
 
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ARQAU API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(BodyLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

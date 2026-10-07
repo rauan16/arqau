@@ -57,6 +57,7 @@ from app.schemas.financial_context import (
     WithdrawalAnalysisRequest,
 )
 from app.services.ai_service import log_provider_error
+from app.core.rate_limit import get_provider_limiter
 from app.services.financial_context_service import (
     analyze_withdrawal_from_context,
     build_financial_context,
@@ -90,6 +91,7 @@ FALLBACK_MALFORMED = "malformed_response"
 FALLBACK_SCHEMA_INVALID = "schema_invalid"
 FALLBACK_UNSAFE_CONTENT = "unsafe_content"
 FALLBACK_UNSUPPORTED_AMOUNT = "unsupported_amount"
+FALLBACK_LOCAL_RATE_LIMIT = "local_rate_limit"
 
 # Output bounds. Provider output is untrusted, so its size is clamped before it
 # is stored or returned.
@@ -1094,6 +1096,7 @@ async def generate_copilot_answer(
     payload: dict[str, Any],
     facts: AuthoritativeCopilotFacts,
     user_message: str,
+    user_id: str,
     analysis: Optional[WithdrawalAnalysis] = None,
 ) -> CopilotAnswer:
     """Run the provider, validate its output, and fall back deterministically.
@@ -1118,6 +1121,10 @@ async def generate_copilot_answer(
             model=provider_model,
         )
         return fallback(FALLBACK_NOT_CONFIGURED)
+
+    # Provider-call budget (Tier 1): only consumed when actually about to call the provider
+    if not await get_provider_limiter().try_acquire(user_id):
+        return fallback(FALLBACK_LOCAL_RATE_LIMIT)
 
     try:
         raw = await provider.generate_copilot(payload, user_message)
@@ -1281,7 +1288,7 @@ async def answer_copilot_query(
     facts = build_authoritative_facts(ctx, analysis)
     payload = build_sanitized_input(ctx, analysis)
     answer = await generate_copilot_answer(
-        provider, payload, facts, message, analysis
+        provider, payload, facts, message, str(user.id), analysis
     )
 
     return CopilotResponse(

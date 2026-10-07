@@ -30,9 +30,16 @@ from app.services.ai_decision import (
     get_decision_provider,
     make_withdrawal_decision,
 )
+from app.core.rate_limit import enforce_total_ceiling
 from app.api.v1.auth import get_current_user
 
 router = APIRouter(prefix="/financial", tags=["financial"])
+
+
+async def _require_ai_request(current_user: User = Depends(get_current_user)) -> User:
+    """Enforce total AI request ceiling (Tier 2)."""
+    await enforce_total_ceiling(str(current_user.id))
+    return current_user
 
 
 @router.get("/context", response_model=FinancialContext)
@@ -81,7 +88,7 @@ async def post_withdrawal_analysis(
 @router.post("/withdrawal-decision", response_model=WithdrawalDecisionResponse)
 async def withdrawal_decision(
     data: WithdrawalAnalysisRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_ai_request),
     db: AsyncSession = Depends(get_db),
     provider: DecisionAIProvider = Depends(get_decision_provider),
     calculation_date: Optional[date] = None,

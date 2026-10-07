@@ -46,6 +46,7 @@ from app.services.financial_context_service import (
     build_financial_context,
 )
 from app.services.ai_service import log_provider_error
+from app.core.rate_limit import get_provider_limiter
 
 logger = logging.getLogger("arqau.ai_decision")
 
@@ -135,6 +136,10 @@ class DecisionAIProvider(ABC):
     def model(self) -> Optional[str]:
         return None
 
+    @property
+    def is_configured(self) -> bool:
+        return True
+
     @abstractmethod
     async def generate_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Return the provider's raw (unvalidated) decision dict."""
@@ -173,6 +178,10 @@ class OpenAIDecisionProvider(DecisionAIProvider):
     @property
     def model(self) -> Optional[str]:
         return self._model or None
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self._api_key)
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -233,6 +242,10 @@ class FakeDecisionProvider(DecisionAIProvider):
     @property
     def model(self) -> Optional[str]:
         return "fake-model"
+
+    @property
+    def is_configured(self) -> bool:
+        return True
 
     async def generate_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.last_payload = payload
@@ -501,6 +514,7 @@ async def generate_decision(
     provider: DecisionAIProvider,
     payload: dict[str, Any],
     analysis: Any,
+    user_id: str,
 ) -> StructuredDecision:
     """Run the provider and validate its output; fall back deterministically.
 
@@ -509,6 +523,19 @@ async def generate_decision(
     """
     provider_name = provider.name
     provider_model = provider.model
+
+    if not provider.is_configured:
+        log_provider_error(
+            "ai_decision_not_configured",
+            RuntimeError("openai_api_key is not configured"),
+            provider=provider_name,
+            model=provider_model,
+        )
+        return build_fallback_decision(analysis, provider_name, provider_model)
+
+    # Provider-call budget (Tier 1): only consumed when actually about to call the provider
+    if not await get_provider_limiter().try_acquire(user_id):
+        return build_fallback_decision(analysis, provider_name, provider_model)
 
     try:
         raw = await provider.generate_decision(payload)
@@ -579,7 +606,7 @@ async def make_withdrawal_decision(
     ctx = await build_financial_context(db, user, calculation_date)
     analysis = analyze_withdrawal_from_context(ctx, amount_minor)
     payload = build_sanitized_input(analysis, ctx)
-    decision = await generate_decision(provider, payload, analysis)
+    decision = await generate_decision(provider, payload, analysis, str(user.id))
 
     return WithdrawalDecisionResponse(
         requested_amount_minor=analysis.requested_amount_minor,

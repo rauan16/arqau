@@ -879,7 +879,7 @@ class TestP351_ProviderPolicy(unittest.IsolatedAsyncioTestCase):
             DecisionContent, "model_validate", side_effect=ValueError("bad")
         ):
             decision = asyncio_run(
-                generate_decision(fake, {"requested_amount_minor": 100}, _stub_analysis())
+                generate_decision(fake, {"requested_amount_minor": 100}, _stub_analysis(), "test-user")
             )
         self.assertEqual(fake.call_count, 1)
         self.assertTrue(decision.ai_metadata.fallback_used)
