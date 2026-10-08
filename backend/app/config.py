@@ -28,6 +28,8 @@ class Settings(BaseModel):
     refresh_token_expire_days: int = 14
     database_url: str = "sqlite+aiosqlite:///./arqau.db"
     cors_origins: str = "http://localhost:3000"
+    jwt_issuer: str = "arqau"
+    jwt_audience: str = "arqau-api"
 
     @model_validator(mode="after")
     def validate_production_settings(self):
@@ -78,4 +80,6 @@ def get_settings() -> Settings:
         database_url=(os.getenv("DATABASE_URL") or "").strip()
         or ("" if environment == "production" else "sqlite+aiosqlite:///./arqau.db"),
         cors_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000"),
+        jwt_issuer=os.getenv("JWT_ISSUER", "arqau"),
+        jwt_audience=os.getenv("JWT_AUDIENCE", "arqau-api"),
     )

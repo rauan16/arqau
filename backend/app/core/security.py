@@ -25,14 +25,35 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire, "iat": now})
+    to_encode.update({"exp": expire, "iat": now, "iss": settings.jwt_issuer, "aud": settings.jwt_audience})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
 
 def decode_access_token(token: str) -> Optional[dict]:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        # First, decode without validation to inspect claims
+        unverified_payload = jwt.get_unverified_claims(token)
+        has_iss = "iss" in unverified_payload
+        has_aud = "aud" in unverified_payload
+
+        # Legacy token: neither iss nor aud present
+        if not has_iss and not has_aud:
+            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+            return payload
+
+        # New-format token: must have BOTH iss and aud
+        if not (has_iss and has_aud):
+            return None
+
+        # Validate iss and aud
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
         return payload
     except JWTError:
         return None

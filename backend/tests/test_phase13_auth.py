@@ -283,6 +283,170 @@ class Phase13AuthTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(decode_access_token(expired_token))
 
+    # -- ISS/AUD CLAIMS ------------------------------------------------
+
+    async def test_new_token_includes_iss_aud_iat_exp(self) -> None:
+        """Newly issued access tokens should include iss, aud, iat, and exp."""
+        from app.core.security import create_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        token = create_access_token({"sub": "test-user", "role": "employee"})
+        decoded = pyjwt.decode(token, options={"verify_signature": False})
+        self.assertEqual(decoded["iss"], settings.jwt_issuer)
+        self.assertEqual(decoded["aud"], settings.jwt_audience)
+        self.assertIn("iat", decoded)
+        self.assertIn("exp", decoded)
+
+    async def test_valid_new_format_token_accepted(self) -> None:
+        """Valid new-format token with correct iss and aud should be accepted."""
+        from app.core.security import create_access_token, decode_access_token
+
+        token = create_access_token({"sub": "test-user", "role": "employee"})
+        payload = decode_access_token(token)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["sub"], "test-user")
+
+    async def test_incorrect_issuer_rejected(self) -> None:
+        """Token with incorrect issuer should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create token with wrong issuer
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "iss": "wrong-issuer", "aud": settings.jwt_audience},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_incorrect_audience_rejected(self) -> None:
+        """Token with incorrect audience should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create token with wrong audience
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer, "aud": "wrong-audience"},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_missing_only_iss_rejected(self) -> None:
+        """Token with aud but missing iss should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create token with aud but no iss
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "aud": settings.jwt_audience},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_missing_only_aud_rejected(self) -> None:
+        """Token with iss but missing aud should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create token with iss but no aud
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_legacy_token_without_iss_aud_accepted(self) -> None:
+        """Legacy token with neither iss nor aud should remain accepted."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create legacy token without iss, aud, iat
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        legacy_token = pyjwt.encode(
+            {"sub": "legacy-user", "role": "employee", "exp": exp},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        payload = decode_access_token(legacy_token)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["sub"], "legacy-user")
+
+    async def test_expired_legacy_token_rejected(self) -> None:
+        """Expired legacy token should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create expired legacy token
+        now = datetime.now(timezone.utc)
+        exp = now - timedelta(minutes=5)
+        expired_token = pyjwt.encode(
+            {"sub": "legacy-user", "role": "employee", "exp": exp},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(expired_token))
+
+    async def test_invalid_signature_rejected(self) -> None:
+        """Invalid signature should be rejected for both legacy and new format."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+
+        # Legacy format with bad signature
+        legacy_bad = pyjwt.encode(
+            {"sub": "test", "role": "employee", "exp": exp},
+            "wrong-secret",
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(legacy_bad))
+
+        # New format with bad signature
+        new_bad = pyjwt.encode(
+            {"sub": "test", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer, "aud": settings.jwt_audience},
+            "wrong-secret",
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(new_bad))
+
+    async def test_unsupported_algorithm_rejected(self) -> None:
+        """Unsupported JWT algorithm should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+
+        # Try to use "none" algorithm (should be rejected as we only allow HS256)
+        none_token = pyjwt.encode(
+            {"sub": "test", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer, "aud": settings.jwt_audience},
+            "",
+            algorithm="none",
+        )
+        self.assertIsNone(decode_access_token(none_token))
+
 
 if __name__ == "__main__":
     unittest.main()
