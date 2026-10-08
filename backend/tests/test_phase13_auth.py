@@ -199,23 +199,22 @@ class Phase13AuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(iat_dt, before - timedelta(seconds=2))
         self.assertLessEqual(iat_dt, after + timedelta(seconds=2))
 
-    async def test_legacy_token_without_iat_accepted_until_exp(self) -> None:
-        """Legacy access tokens without iat should remain accepted until exp."""
+    async def test_tokens_without_iss_aud_rejected(self) -> None:
+        """Tokens without iss and aud claims should be rejected."""
         from app.core.security import decode_access_token
         from app.config import get_settings
 
         settings = get_settings()
-        # Create a token without iat (legacy style)
         now = datetime.now(timezone.utc)
         exp = now + timedelta(minutes=30)
-        legacy_token = pyjwt.encode(
+        # Token without iss and aud
+        token = pyjwt.encode(
             {"sub": "legacy-user", "role": "employee", "exp": exp},
             settings.secret_key,
             algorithm=settings.algorithm,
         )
-        payload = decode_access_token(legacy_token)
-        self.assertIsNotNone(payload)
-        self.assertEqual(payload["sub"], "legacy-user")
+        payload = decode_access_token(token)
+        self.assertIsNone(payload)
 
     async def test_inactive_user_rejected_on_auth_me(self) -> None:
         """Inactive users should receive 401 on /auth/me."""
@@ -373,56 +372,74 @@ class Phase13AuthTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(decode_access_token(token))
 
-    async def test_legacy_token_without_iss_aud_accepted(self) -> None:
-        """Legacy token with neither iss nor aud should remain accepted."""
+    async def test_token_missing_iss_rejected(self) -> None:
+        """Token with aud but missing iss should be rejected."""
         from app.core.security import decode_access_token
         from app.config import get_settings
 
         settings = get_settings()
-        # Create legacy token without iss, aud, iat
         now = datetime.now(timezone.utc)
         exp = now + timedelta(minutes=30)
-        legacy_token = pyjwt.encode(
-            {"sub": "legacy-user", "role": "employee", "exp": exp},
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "aud": settings.jwt_audience},
             settings.secret_key,
             algorithm=settings.algorithm,
         )
-        payload = decode_access_token(legacy_token)
-        self.assertIsNotNone(payload)
-        self.assertEqual(payload["sub"], "legacy-user")
+        self.assertIsNone(decode_access_token(token))
 
-    async def test_expired_legacy_token_rejected(self) -> None:
-        """Expired legacy token should be rejected."""
+    async def test_token_missing_aud_rejected(self) -> None:
+        """Token with iss but missing aud should be rejected."""
         from app.core.security import decode_access_token
         from app.config import get_settings
 
         settings = get_settings()
-        # Create expired legacy token
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_token_without_iss_aud_rejected(self) -> None:
+        """Token with neither iss nor aud should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        token = pyjwt.encode(
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(token))
+
+    async def test_expired_token_rejected(self) -> None:
+        """Expired token should be rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
         now = datetime.now(timezone.utc)
         exp = now - timedelta(minutes=5)
         expired_token = pyjwt.encode(
-            {"sub": "legacy-user", "role": "employee", "exp": exp},
+            {"sub": "test-user", "role": "employee", "exp": exp, "iat": now, "iss": settings.jwt_issuer, "aud": settings.jwt_audience},
             settings.secret_key,
             algorithm=settings.algorithm,
         )
         self.assertIsNone(decode_access_token(expired_token))
 
     async def test_invalid_signature_rejected(self) -> None:
-        """Invalid signature should be rejected for both legacy and new format."""
+        """Invalid signature should be rejected."""
         from app.core.security import decode_access_token
         from app.config import get_settings
 
         settings = get_settings()
         now = datetime.now(timezone.utc)
         exp = now + timedelta(minutes=30)
-
-        # Legacy format with bad signature
-        legacy_bad = pyjwt.encode(
-            {"sub": "test", "role": "employee", "exp": exp},
-            "wrong-secret",
-            algorithm=settings.algorithm,
-        )
-        self.assertIsNone(decode_access_token(legacy_bad))
 
         # New format with bad signature
         new_bad = pyjwt.encode(

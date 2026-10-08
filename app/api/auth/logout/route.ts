@@ -1,25 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateCsrfOrigin, createCsrfErrorResponse } from "@/lib/csrf";
 
 const BACKEND_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const COOKIE_NAME = "arqau_refresh";
 const COOKIE_PATH = "/api/auth";
 
-function validateOrigin(request: NextRequest): boolean {
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (!host) return false;
-  if (!origin) return true;
-  try {
-    const originUrl = new URL(origin);
-    return originUrl.host === host;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(request: NextRequest) {
-  if (!validateOrigin(request)) {
-    return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
+  const csrf = validateCsrfOrigin(request);
+  if (!csrf.valid) {
+    return createCsrfErrorResponse(csrf.error || "Invalid origin");
   }
 
   const refreshToken = request.cookies.get(COOKIE_NAME)?.value;

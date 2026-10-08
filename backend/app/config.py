@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Literal
+from urllib.parse import urlparse
 
 import os
 from dotenv import load_dotenv
@@ -33,6 +34,83 @@ MIN_ACCESS_TOKEN_TTL = 1
 MAX_ACCESS_TOKEN_TTL = 1440  # 24 hours
 
 
+def _validate_cors_origin(origin: str, environment: str) -> List[str]:
+    """Validate a single CORS origin string."""
+    errors = []
+
+    # Reject empty
+    if not origin.strip():
+        errors.append("CORS origin cannot be empty")
+        return errors
+
+    # Reject wildcard
+    if origin.strip() == "*":
+        errors.append("CORS wildcard '*' is not allowed in production")
+        return errors
+
+    # Parse URL
+    try:
+        parsed = urlparse(origin.strip())
+    except Exception:
+        errors.append(f"Invalid CORS origin URL: {origin}")
+        return errors
+
+    # Must have scheme and netloc
+    if not parsed.scheme or not parsed.netloc:
+        errors.append(f"CORS origin must have scheme and host: {origin}")
+        return errors
+
+    # Reject non-HTTPS in production
+    if environment == "production" and parsed.scheme.lower() != "https":
+        errors.append(f"CORS origin must use HTTPS in production: {origin}")
+        return errors
+
+    # Allow HTTP for localhost in development
+    if environment != "production" and parsed.scheme.lower() == "http":
+        if not (parsed.hostname == "localhost" or parsed.hostname == "127.0.0.1"):
+            errors.append(f"CORS origin must use HTTPS or be localhost in development: {origin}")
+            return errors
+
+    # Reject paths, queries, fragments
+    if parsed.path not in ("", "/"):
+        errors.append(f"CORS origin must not contain path: {origin}")
+        return errors
+    if parsed.query:
+        errors.append(f"CORS origin must not contain query string: {origin}")
+        return errors
+    if parsed.fragment:
+        errors.append(f"CORS origin must not contain fragment: {origin}")
+        return errors
+
+    # Reject credentials in URL
+    if "@" in parsed.netloc:
+        errors.append(f"CORS origin must not contain credentials: {origin}")
+        return errors
+
+    # Reject localhost/loopback in production
+    if environment == "production":
+        hostname = parsed.hostname.lower() if parsed.hostname else ""
+        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            errors.append(f"CORS origin must not be localhost in production: {origin}")
+            return errors
+
+    return errors
+
+
+def _validate_cors_origins(cors_origins: str, environment: str) -> List[str]:
+    """Validate CORS origins string (comma-separated)."""
+    origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+
+    if not origins:
+        return ["CORS_ORIGINS must contain at least one origin"]
+
+    all_errors = []
+    for origin in origins:
+        all_errors.extend(_validate_cors_origin(origin, environment))
+
+    return all_errors
+
+
 def _environment_value() -> str:
     return os.getenv(
         "APP_ENV", os.getenv("ENVIRONMENT", os.getenv("ENV", "development"))
@@ -51,6 +129,9 @@ class Settings(BaseModel):
     cors_origins: str = "http://localhost:3000"
     jwt_issuer: str = "arqau"
     jwt_audience: str = "arqau-api"
+    # Number of trusted proxy hops. 0 = disabled (default).
+    # When > 0, X-Forwarded-For is parsed and the IP at position [-trusted_proxy_count] is used.
+    trusted_proxy_count: int = 0
 
     @model_validator(mode="after")
     def validate_production_settings(self):
@@ -81,6 +162,10 @@ class Settings(BaseModel):
         # Access token TTL bounds
         if not (MIN_ACCESS_TOKEN_TTL <= self.access_token_expire_minutes <= MAX_ACCESS_TOKEN_TTL):
             errors.append(f"ACCESS_TOKEN_EXPIRE_MINUTES must be between {MIN_ACCESS_TOKEN_TTL} and {MAX_ACCESS_TOKEN_TTL}")
+
+        # CORS origins validation
+        cors_errors = _validate_cors_origins(self.cors_origins, self.environment)
+        errors.extend(cors_errors)
 
         if not self.database_url:
             errors.append("DATABASE_URL is required")
@@ -119,4 +204,5 @@ def get_settings() -> Settings:
         cors_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000"),
         jwt_issuer=os.getenv("JWT_ISSUER", "arqau"),
         jwt_audience=os.getenv("JWT_AUDIENCE", "arqau-api"),
+        trusted_proxy_count=int(os.getenv("TRUSTED_PROXY_COUNT", "0")),
     )

@@ -32,18 +32,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 def decode_access_token(token: str) -> Optional[dict]:
     try:
-        # First, decode without validation to inspect claims
+        # First, decode without validation to check for required claims
         unverified_payload = jwt.get_unverified_claims(token)
-        has_iss = "iss" in unverified_payload
-        has_aud = "aud" in unverified_payload
 
-        # Legacy token: neither iss nor aud present
-        if not has_iss and not has_aud:
-            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-            return payload
-
-        # New-format token: must have BOTH iss and aud
-        if not (has_iss and has_aud):
+        # All tokens MUST have both iss and aud claims
+        if "iss" not in unverified_payload or "aud" not in unverified_payload:
             return None
 
         # Validate iss and aud
