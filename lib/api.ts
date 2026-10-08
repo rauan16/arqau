@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BFF_BASE = "/api";
 
 export interface User {
   id: string;
@@ -110,11 +111,154 @@ function getToken(): string | null {
 function setToken(token: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem("arqau_token", token);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new StorageEvent("storage", { key: "arqau_token", newValue: token }));
+  }
 }
 
 function clearToken() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem("arqau_token");
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new StorageEvent("storage", { key: "arqau_token", newValue: null }));
+  }
+}
+
+const REFRESH_LOCK_NAME = "arqau_refresh_lock";
+const REFRESH_CHANNEL_NAME = "arqau_refresh_channel";
+const SESSION_VERSION_KEY = "arqau_session_version";
+
+function getSessionVersion(): number {
+  if (typeof window === "undefined") return 0;
+  const v = window.localStorage.getItem(SESSION_VERSION_KEY);
+  return v ? parseInt(v, 10) : 0;
+}
+
+function setSessionVersion(version: number): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SESSION_VERSION_KEY, String(version));
+  window.dispatchEvent(new StorageEvent("storage", { key: SESSION_VERSION_KEY, newValue: String(version) }));
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+let broadcastChannel: BroadcastChannel | null = null;
+
+function getBroadcastChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined") return null;
+  if (!broadcastChannel) {
+    try {
+      broadcastChannel = new BroadcastChannel(REFRESH_CHANNEL_NAME);
+      broadcastChannel.onmessage = (event) => {
+        if (event.data === "logout") {
+          clearToken();
+          refreshPromise = null;
+        } else if (event.data === "refresh_success") {
+          // Another tab refreshed successfully; invalidate local promise so next call re-checks
+          refreshPromise = null;
+        }
+      };
+    } catch {
+      broadcastChannel = null;
+    }
+  }
+  return broadcastChannel;
+}
+
+// Test-only: reset cached broadcast channel
+export function __test_resetBroadcastChannel(): void {
+  broadcastChannel = null;
+}
+
+function broadcastRefreshSuccess(): void {
+  const ch = getBroadcastChannel();
+  if (ch) ch.postMessage("refresh_success");
+}
+
+function broadcastLogout(): void {
+  const ch = getBroadcastChannel();
+  if (ch) ch.postMessage("logout");
+}
+
+async function withRefreshLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (typeof window === "undefined") {
+    return operation();
+  }
+
+  if (navigator.locks) {
+    // Web Locks API: exclusive lock per origin
+    // The lock is held for the duration of the callback and released when it returns
+    return await (navigator as any).locks.request(REFRESH_LOCK_NAME, { mode: "exclusive" }, async () => {
+      return await operation();
+    });
+  }
+
+  // Fallback: no lock available, proceed without cross-tab exclusion
+  return operation();
+}
+
+async function doRefresh(): Promise<boolean> {
+  try {
+    const response = await fetch(`${BFF_BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    if (!response.ok) return false;
+    const data = await response.json().catch(() => ({}));
+    if (data.access_token) {
+      setToken(data.access_token);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function refreshOnce(): Promise<boolean> {
+  const versionBefore = getSessionVersion();
+
+  // Fast path: if another tab already refreshed, re-check token
+  if (refreshPromise) {
+    try {
+      const result = await refreshPromise;
+      if (result && getToken()) return true;
+    } catch {
+      // Previous refresh failed; proceed to attempt our own
+    }
+  }
+
+  return withRefreshLock(async () => {
+    // Double-check inside lock using session version (reliable cross-tab signal)
+    if (getSessionVersion() > versionBefore) {
+      // Another tab already refreshed; our token should be valid
+      if (getToken()) return true;
+    }
+
+    // Check if refreshPromise is still valid (from a previous attempt in this tab)
+    if (refreshPromise) {
+      try {
+        const result = await refreshPromise;
+        if (result && getToken()) return true;
+      } catch {
+        // Previous refresh failed; proceed to attempt our own
+      }
+    }
+
+    refreshPromise = (async () => {
+      try {
+        const success = await doRefresh();
+        if (success) {
+          setSessionVersion(getSessionVersion() + 1);
+          broadcastRefreshSuccess();
+        }
+        return success;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+
+    return await refreshPromise;
+  });
 }
 
 async function request<T>(
@@ -132,6 +276,8 @@ async function request<T>(
   }
 
   let lastError: Error | null = null;
+  let attemptedRefresh = false;
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetch(`${API_BASE}${path}`, {
@@ -140,9 +286,18 @@ async function request<T>(
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
+        if (response.status === 401 && !attemptedRefresh && !path.startsWith("/auth/")) {
+          attemptedRefresh = true;
+          const refreshed = await refreshOnce();
+          if (refreshed) {
+            const newToken = getToken();
+            if (newToken) {
+              headers["Authorization"] = `Bearer ${newToken}`;
+              continue;
+            }
+          }
           clearToken();
-          if (typeof window !== "undefined") {
+          if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
             window.location.href = "/login";
           }
         }
@@ -171,16 +326,65 @@ async function request<T>(
 
 export const api = {
   auth: {
-    register: (email: string, password: string, name?: string) =>
-      request<{ access_token: string; token_type: string; user_id: string }>("/auth/register", {
+    register: async (email: string, password: string, name?: string) => {
+      const response = await fetch(`${BFF_BASE}/auth/register`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name }),
-      }),
-    login: (email: string, password: string) =>
-      request<{ access_token: string; token_type: string; user_id: string }>("/auth/login", {
+        credentials: "same-origin",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = data?.error || data?.detail || data?.message || "Registration failed";
+        throw new ApiError(detail, response.status);
+      }
+      if (data.access_token) setToken(data.access_token);
+      return data;
+    },
+    login: async (email: string, password: string) => {
+      const response = await fetch(`${BFF_BASE}/auth/login`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-      }),
+        credentials: "same-origin",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = data?.error || data?.detail || data?.message || "Login failed";
+        throw new ApiError(detail, response.status);
+      }
+      if (data.access_token) setToken(data.access_token);
+      return data;
+    },
+    logout: async () => {
+      try {
+        await fetch(`${BFF_BASE}/auth/logout`, {
+          method: "POST",
+          credentials: "same-origin",
+        });
+      } catch {
+        // Ignore network errors; logout is best-effort
+      } finally {
+        clearToken();
+        setSessionVersion(0);
+        broadcastLogout();
+      }
+    },
+    refresh: async () => {
+      const response = await fetch(`${BFF_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = data?.error || data?.detail || data?.message || "Token refresh failed";
+        throw new ApiError(detail, response.status);
+      }
+      if (data.access_token) setToken(data.access_token);
+      // BFF strips refresh_token from JSON response; return only access_token and rest
+      const { refresh_token, ...rest } = data;
+      return rest;
+    },
     me: () => request<User>("/auth/me"),
   },
 
@@ -250,4 +454,4 @@ export const api = {
   },
 };
 
-export { getToken, setToken, clearToken, ApiError };
+export { getToken, setToken, clearToken, ApiError, broadcastRefreshSuccess, broadcastLogout, doRefresh, refreshOnce, request, withRefreshLock, getSessionVersion, setSessionVersion };

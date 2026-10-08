@@ -11,7 +11,7 @@ interface AuthContextValue {
   onboardingComplete: boolean;
   login: (email: string, password: string) => Promise<{ redirectTo: string }>;
   register: (email: string, password: string, name?: string) => Promise<{ redirectTo: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -63,8 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return login(email, password);
   };
 
-  const logout = () => {
-    clearToken();
+  const logout = async () => {
+    await api.auth.logout();
     setUser(null);
     setOnboardingComplete(false);
     setState("unauthenticated");
