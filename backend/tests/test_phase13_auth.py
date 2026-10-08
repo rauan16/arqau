@@ -4,15 +4,17 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
 import httpx
+import jwt as pyjwt
 from sqlalchemy import text
 
 from app.core.database import Base, configure_database, create_database
 from app.config import get_settings
 from app.database import get_db
 from app.main import app
-from app.models import RefreshToken
+from app.models import RefreshToken, User
 
 os.environ.setdefault("APP_ENV", "testing")
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -147,6 +149,139 @@ class Phase13AuthTests(unittest.IsolatedAsyncioTestCase):
             row = (await session.execute(text("SELECT token_hash FROM refresh_tokens"))).first()
             self.assertNotIn(payload["refresh_token"], row.token_hash)
             self.assertEqual(len(row.token_hash), 64)
+
+    # -- TTL & CLAIMS HARDENING ----------------------------------------
+
+    async def test_render_config_access_ttl_thirty_minutes(self) -> None:
+        """Render configuration should specify 30-minute access TTL."""
+        import yaml
+        render_path = Path(__file__).resolve().parents[1] / "render.yaml"
+        with open(render_path) as f:
+            render_config = yaml.safe_load(f)
+        env_vars = {}
+        for item in render_config["services"][0]["envVars"]:
+            if "value" in item:
+                env_vars[item["key"]] = item["value"]
+        self.assertEqual(env_vars.get("ACCESS_TOKEN_EXPIRE_MINUTES"), "30")
+
+    async def test_access_token_expires_according_to_configured_ttl(self) -> None:
+        """Newly issued access tokens should expire according to configured TTL."""
+        from app.core.security import create_access_token, decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Default is 30 minutes
+        token = create_access_token({"sub": "test-user", "role": "employee"})
+        payload = decode_access_token(token)
+        self.assertIn("exp", payload)
+        self.assertIn("iat", payload)
+
+        # exp should be roughly 30 minutes from now
+        exp_dt = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        iat_dt = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
+        delta = exp_dt - iat_dt
+        self.assertGreaterEqual(delta, timedelta(minutes=29))
+        self.assertLessEqual(delta, timedelta(minutes=31))
+
+    async def test_access_token_contains_valid_iat(self) -> None:
+        """Newly issued access tokens should contain a valid iat claim."""
+        from app.core.security import create_access_token, decode_access_token
+
+        before = datetime.now(timezone.utc)
+        token = create_access_token({"sub": "test-user", "role": "employee"})
+        after = datetime.now(timezone.utc)
+
+        payload = decode_access_token(token)
+        self.assertIn("iat", payload)
+        iat_dt = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
+        self.assertGreaterEqual(iat_dt, before - timedelta(seconds=2))
+        self.assertLessEqual(iat_dt, after + timedelta(seconds=2))
+
+    async def test_legacy_token_without_iat_accepted_until_exp(self) -> None:
+        """Legacy access tokens without iat should remain accepted until exp."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+        # Create a token without iat (legacy style)
+        now = datetime.now(timezone.utc)
+        exp = now + timedelta(minutes=30)
+        legacy_token = pyjwt.encode(
+            {"sub": "legacy-user", "role": "employee", "exp": exp},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        payload = decode_access_token(legacy_token)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["sub"], "legacy-user")
+
+    async def test_inactive_user_rejected_on_auth_me(self) -> None:
+        """Inactive users should receive 401 on /auth/me."""
+        payload = await self._register("inactive@example.com", name="Inactive")
+        access_token = payload["access_token"]
+
+        # Deactivate the user
+        async with self.sessions() as session:
+            user = await session.get(User, payload["user_id"])
+            user.is_active = False
+            await session.commit()
+
+        # Try to access /auth/me with inactive user's token
+        response = await self.client.get("/auth/me", headers={"Authorization": f"Bearer {access_token}"})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["detail"], "Inactive account")
+
+    async def test_inactive_user_cannot_refresh(self) -> None:
+        """Inactive users should not be able to refresh tokens."""
+        payload = await self._register("inactive2@example.com", name="Inactive2")
+        refresh_token = payload["refresh_token"]
+
+        # Deactivate the user
+        async with self.sessions() as session:
+            user = await session.get(User, payload["user_id"])
+            user.is_active = False
+            await session.commit()
+
+        # Try to refresh with inactive user's refresh token
+        response = await self.client.post("/auth/refresh", json={"refresh_token": refresh_token})
+        self.assertEqual(response.status_code, 401)
+
+    async def test_refresh_rotation_still_works(self) -> None:
+        """Existing refresh rotation should continue to work after changes."""
+        payload = await self._register("rotation@example.com", name="Rotation")
+        old_refresh = payload["refresh_token"]
+
+        refresh = await self.client.post("/auth/refresh", json={"refresh_token": old_refresh})
+        self.assertEqual(refresh.status_code, 200, refresh.text)
+        new_payload = refresh.json()
+        self.assertNotEqual(new_payload["refresh_token"], old_refresh)
+        self.assertIn("access_token", new_payload)
+        # Verify iat in new access token by decoding it
+        decoded = pyjwt.decode(new_payload["access_token"], options={"verify_signature": False})
+        self.assertIn("iat", decoded)
+
+    async def test_invalid_signature_and_expired_tokens_rejected(self) -> None:
+        """Invalid signatures and expired tokens should remain rejected."""
+        from app.core.security import decode_access_token
+        from app.config import get_settings
+
+        settings = get_settings()
+
+        # Invalid signature
+        bad_token = pyjwt.encode(
+            {"sub": "test", "role": "employee", "exp": datetime.now(timezone.utc) + timedelta(minutes=30)},
+            "wrong-secret",
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(bad_token))
+
+        # Expired token
+        expired_token = pyjwt.encode(
+            {"sub": "test", "role": "employee", "exp": datetime.now(timezone.utc) - timedelta(minutes=5)},
+            settings.secret_key,
+            algorithm=settings.algorithm,
+        )
+        self.assertIsNone(decode_access_token(expired_token))
 
 
 if __name__ == "__main__":

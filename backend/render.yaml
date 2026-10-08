@@ -20,4 +20,4 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4o-mini
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "43200"
+        value: "30"
