@@ -22,6 +22,7 @@ from app.core.rate_limit import (
     get_total_limiter,
     get_provider_limiter,
 )
+from app.core.auth_rate_limit import _reset_all_limiters
 from app.core.security import get_password_hash
 from app.database import get_db
 from app.main import app
@@ -262,6 +263,7 @@ class _ProviderIntegrationBase(unittest.IsolatedAsyncioTestCase):
     """Shared test infrastructure for provider integration tests."""
 
     async def asyncSetUp(self) -> None:
+        _reset_all_limiters()
         self.temp_dir = tempfile.TemporaryDirectory()
         database_path = Path(self.temp_dir.name) / "phase352.db"
         self.database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"

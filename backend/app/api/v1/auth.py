@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -31,6 +31,11 @@ from app.core.security import (
     hash_refresh_token,
     make_family_id,
     role_from_user,
+)
+from app.core.auth_rate_limit import (
+    enforce_login_rate_limit,
+    enforce_register_rate_limit,
+    enforce_refresh_rate_limit,
 )
 from app.config import get_settings
 
@@ -84,7 +89,11 @@ async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
 
 
 @router.post("/register", response_model=TokenResponse)
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
+async def register(
+    data: UserRegister,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(enforce_register_rate_limit),
+):
     result = await db.execute(select(User).where(User.email == data.email))
     existing = result.scalar_one_or_none()
     if existing:
@@ -115,7 +124,11 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(
+    data: UserLogin,
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(enforce_login_rate_limit),
+):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.hashed_password):
@@ -148,6 +161,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
 async def refresh_token(
     data: RefreshRequest = Body(...),
     db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(enforce_refresh_rate_limit),
 ):
     refresh_token = data.refresh_token
     token_hash = hash_refresh_token(refresh_token)
