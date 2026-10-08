@@ -1142,3 +1142,253 @@ describe("lib/api.ts - Cross-tab acceptance", () => {
     expect(apiModule.getSessionVersion()).toBeGreaterThan(0);
   });
 });
+
+describe("lib/api.ts - HTTP Error Handling", () => {
+  let originalWindow: any;
+  let originalFetch: any;
+  let request: any;
+  let getToken: any;
+  let setToken: any;
+  let ApiError: any;
+
+  function createMockResponse(status: number, retryAfter: string | null = null) {
+    return {
+      ok: false,
+      status,
+      headers: {
+        get: vi.fn(() => retryAfter),
+      },
+      json: async () => ({ detail: "Error" }),
+    };
+  }
+
+  beforeEach(async () => {
+    originalWindow = global.window;
+    originalFetch = global.fetch;
+    global.window = {
+      localStorage: {
+        getItem: vi.fn(() => "test-access-token"),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
+      dispatchEvent: vi.fn(),
+      location: { pathname: "/dashboard" },
+    } as any;
+
+    Object.defineProperty(global.navigator, "locks", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    global.fetch = vi.fn();
+    vi.resetModules();
+    const apiModule = await import("./api");
+    request = apiModule.request;
+    getToken = apiModule.getToken;
+    setToken = apiModule.setToken;
+    ApiError = apiModule.ApiError;
+  });
+
+  afterEach(() => {
+    global.window = originalWindow;
+    global.fetch = originalFetch;
+    vi.clearAllMocks();
+  });
+
+  it("HTTP 403 produces a permission-denied error", async () => {
+    (global.fetch as any).mockResolvedValueOnce(createMockResponse(403));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Permission denied");
+    expect(error.status).toBe(403);
+  });
+
+  it("HTTP 429 produces a rate-limit error with Retry-After in seconds", async () => {
+    (global.fetch as any).mockImplementation(async () => createMockResponse(429, "60"));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(429);
+    expect(error.retryAfter).toBe(60);
+    expect(error.message).toContain("60 second");
+  });
+
+  it("HTTP 429 produces a rate-limit error with Retry-After in HTTP-date format", async () => {
+    const futureDate = new Date(Date.now() + 120000).toUTCString();
+    (global.fetch as any).mockImplementation(async () => createMockResponse(429, futureDate));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(429);
+    expect(error.retryAfter).toBeGreaterThan(0);
+    expect(error.retryAfter).toBeLessThanOrEqual(120);
+  });
+
+  it("HTTP 429 handles missing Retry-After header gracefully", async () => {
+    (global.fetch as any).mockImplementation(async () => createMockResponse(429, null));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(429);
+    expect(error.retryAfter).toBeNull();
+    expect(error.message).toContain("later");
+  });
+
+  it("HTTP 429 handles malformed Retry-After header gracefully", async () => {
+    (global.fetch as any).mockImplementation(async () => createMockResponse(429, "invalid"));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(429);
+    expect(error.retryAfter).toBeNull();
+  });
+
+  it("HTTP 500 produces a safe server error message", async () => {
+    (global.fetch as any).mockResolvedValueOnce(createMockResponse(500));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Server error");
+    expect(error.status).toBe(500);
+  });
+
+  it("HTTP 502 produces a safe service unavailable message", async () => {
+    (global.fetch as any).mockResolvedValueOnce(createMockResponse(502));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Service temporarily unavailable");
+    expect(error.status).toBe(502);
+  });
+
+  it("HTTP 503 produces a safe service unavailable message", async () => {
+    (global.fetch as any).mockResolvedValueOnce(createMockResponse(503));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Service unavailable");
+    expect(error.status).toBe(503);
+  });
+
+  it("HTTP 504 produces a safe gateway timeout message", async () => {
+    (global.fetch as any).mockResolvedValueOnce(createMockResponse(504));
+
+    let error: any;
+    try {
+      await request("/finance/summary");
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeDefined();
+    expect(error.message).toContain("Gateway timeout");
+    expect(error.status).toBe(504);
+  });
+
+  it("non-idempotent financial requests are not retried on network error", async () => {
+    let callCount = 0;
+    (global.fetch as any).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("Network error");
+      }
+      return { ok: true, json: async () => ({ total_income_minor: 1000 }) };
+    });
+
+    await expect(request("/ewa/request", { method: "POST", body: JSON.stringify({ amount_minor: 100 }) })).rejects.toThrow("Network error");
+    expect(callCount).toBe(1);
+  });
+
+  it("idempotent GET requests are retried on network error", async () => {
+    let callCount = 0;
+    (global.fetch as any).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("Network error");
+      }
+      return { ok: true, json: async () => ({ total_income_minor: 1000 }) };
+    });
+
+    const result = await request("/finance/summary");
+    expect(result).toEqual({ total_income_minor: 1000 });
+    expect(callCount).toBe(2);
+  });
+
+  it("concurrent 401 requests share single refresh attempt", async () => {
+    let refreshCallCount = 0;
+    let attempt = 0;
+    (global.fetch as any).mockImplementation(async (url: string) => {
+      attempt++;
+      if (url.includes("/auth/refresh")) {
+        refreshCallCount++;
+        return {
+          ok: true,
+          json: async () => ({ access_token: "new-access-token" }),
+        };
+      }
+      if (url.includes("/finance/summary")) {
+        if (attempt <= 2) {
+          return {
+            ok: false,
+            status: 401,
+            headers: { get: vi.fn(() => null) },
+            json: async () => ({ detail: "Unauthorized" }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ total_income_minor: 1000 }),
+        };
+      }
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const [result1, result2] = await Promise.all([
+      request("/finance/summary"),
+      request("/finance/summary"),
+    ]);
+
+    expect(refreshCallCount).toBe(1);
+  });
+});

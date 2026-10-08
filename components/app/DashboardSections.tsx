@@ -6,13 +6,10 @@ import { ArrowRight, Check, CircleDollarSign, Plus, Search, Send, Sparkles, Tren
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/lib/language-context";
-import { api, Transaction, FinanceSummary, EarnedWages, WageAccessRequest, WithdrawalAnalysis } from "@/lib/api";
+import { api, Transaction, FinanceSummary, WageAccessRequest, WithdrawalDecisionResponse, StructuredDecision, EWAResultResponse, CopilotResponse, CopilotFact, CopilotMetadata, AuthoritativeCopilotFacts } from "@/lib/api";
+import { formatMinorAsTenge, parseAmountInput } from "@/lib/money";
 
 const panel = "rounded-[16px] border border-ink/[0.07] bg-white/70 p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)]";
-
-function formatTenge(value: number) {
-  return value.toLocaleString("en-US");
-}
 
 function PageFrame({ eyebrow, title, copy, children }: { eyebrow: string; title: string; copy: string; children: React.ReactNode }) {
   return <div>
@@ -125,9 +122,9 @@ export function FinancePage() {
   return <PageFrame eyebrow="Finance" title="See the money in context." copy={t.expenses.subtitle}>
     {error && <div className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700 flex items-center gap-2"><AlertCircle size={16} />{error}</div>}
     <div className="grid gap-5 md:grid-cols-3">
-      <Metric label={t.expenses.income} value={income ? `${formatTenge(income)} ₸` : "—"} icon={<TrendingUp />} />
-      <Metric label={t.expenses.expensesLabel} value={expense ? `${formatTenge(expense)} ₸` : "—"} icon={<TrendingDown />} />
-      <Metric label={t.expenses.netBalance} value={summary ? `${formatTenge(summary.net_balance_minor)} ₸` : "—"} icon={<CircleDollarSign />} />
+      <Metric label={t.expenses.income} value={income ? formatMinorAsTenge(income) : "—"} icon={<TrendingUp />} />
+      <Metric label={t.expenses.expensesLabel} value={expense ? formatMinorAsTenge(expense) : "—"} icon={<TrendingDown />} />
+      <Metric label={t.expenses.netBalance} value={summary ? formatMinorAsTenge(summary.net_balance_minor) : "—"} icon={<CircleDollarSign />} />
     </div>
 
     <div className="mt-5 grid gap-5 lg:grid-cols-1">
@@ -163,7 +160,7 @@ export function FinancePage() {
                   <p className="text-ink-soft">{item.date ? new Date(item.date).toLocaleDateString() : ""}</p>
                 </div>
                 <span className={`font-bold numbers ${item.type === "income" ? "text-orange" : "text-orange-dark"}`}>
-                  {item.type === "income" ? "+" : "-"}{formatTenge(item.amount_minor)} ₸
+                  {item.type === "income" ? "+" : "-"}{formatMinorAsTenge(item.amount_minor)}
                 </span>
               </div>
             ))}
@@ -176,44 +173,44 @@ export function FinancePage() {
 
 export function AIPage() {
   const { t } = useTranslation();
-  const [earned, setEarned] = useState<EarnedWages | null>(null);
+  const [calculation, setCalculation] = useState<EWAResultResponse | null>(null);
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
-  const [analysis, setAnalysis] = useState<WithdrawalAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<WithdrawalDecisionResponse | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [message, setMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState<Array<{ from: "you" | "arqau"; text: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{ from: "you"; text: string } | { from: "arqau"; data: CopilotResponse }>>([]);
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatDisabled, setChatDisabled] = useState(false);
 
-  async function loadEarned() {
+  async function loadCalculation() {
     try {
-      const data = await api.ewa.getEarned();
-      setEarned(data);
+      const data = await api.ewa.getCalculation();
+      setCalculation(data);
     } catch {
-      setEarned(null);
+      setCalculation(null);
     }
   }
 
   useEffect(() => {
-    loadEarned();
+    loadCalculation();
   }, []);
 
   async function handleAnalyze() {
-    const amount = Number(withdrawalAmount);
-    if (!amount || amount <= 0) {
+    const amountTenge = Number(withdrawalAmount);
+    if (!amountTenge || amountTenge <= 0) {
       setAnalysisError(t.withdraw.errorValid);
       return;
     }
-    if (earned && amount > earned.available_amount_minor) {
-      setAnalysisError(`Amount exceeds available (${formatTenge(earned.available_amount_minor)} ₸)`);
+    if (calculation && amountTenge * 100 > calculation.available_amount_minor) {
+      setAnalysisError(`Amount exceeds available (${formatMinorAsTenge(calculation.available_amount_minor)})`);
       return;
     }
     setAnalyzing(true);
     setAnalysisError("");
     try {
-      const result = await api.ai.analyzeWithdrawal(amount);
+      const result = await api.ai.analyzeWithdrawal(amountTenge);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : t.ai.unavailable);
@@ -233,7 +230,7 @@ export function AIPage() {
     setChatDisabled(true);
     try {
       const result = await api.ai.chat(userMsg);
-      setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
+      setChatHistory((h) => [...h, { from: "arqau", data: result }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t.ai.chatFailed;
       setChatError(msg);
@@ -251,7 +248,7 @@ export function AIPage() {
     setChatDisabled(true);
     try {
       const result = await api.ai.chat(message.trim());
-      setChatHistory((h) => [...h, { from: "arqau", text: result.response }]);
+      setChatHistory((h) => [...h, { from: "arqau", data: result }]);
       setMessage("");
     } catch (err) {
       const msg = err instanceof Error ? err.message : t.ai.chatFailed;
@@ -263,7 +260,7 @@ export function AIPage() {
   }
 
   const contextualPrompts = useMemo(() => {
-    if (!earned || earned.available_amount_minor === 0) {
+    if (!calculation || calculation.available_amount_minor === 0) {
       return [
         "How much should I take today?",
         "Will my upcoming bills be covered?",
@@ -271,23 +268,23 @@ export function AIPage() {
         "What if I take a larger amount?",
       ];
     }
-    const available = formatTenge(earned.available_amount_minor);
-    const half = Math.floor(earned.available_amount_minor / 2);
+    const available = formatMinorAsTenge(calculation.available_amount_minor);
+    const half = formatMinorAsTenge(Math.floor(calculation.available_amount_minor / 2));
     return [
-      `What happens if I withdraw ${formatTenge(half)}?`,
+      `What happens if I withdraw ${half}?`,
       `Should I access ${available} now?`,
       "How do I protect my reserve?",
       "What amount covers my bills?",
     ];
-  }, [earned]);
+  }, [calculation]);
 
   return <PageFrame eyebrow={t.ai.title} title="Explore your financial context." copy={t.ai.subtitle}>
     <div className="grid gap-5 lg:grid-cols-[1fr_0.35fr]">
       <section className={`${panel} max-w-[760px]`}>
         <h2 className="mb-4 text-[16px] font-bold">{t.ai.withdrawalAnalysis}</h2>
-        {earned && (
+        {calculation && (
           <div className="mb-4 rounded-[12px] bg-orange-soft px-4 py-3 text-[13px] text-ink-soft">
-            {t.withdraw.available}: <span className="font-bold text-orange numbers">{formatTenge(earned.available_amount_minor)} ₸</span>
+            {t.withdraw.available}: <span className="font-bold text-orange numbers">{formatMinorAsTenge(calculation.available_amount_minor)}</span>
           </div>
         )}
         <div className="flex gap-2">
@@ -317,27 +314,56 @@ export function AIPage() {
         {analysis && !analyzing && (
           <div className="mt-4 space-y-3 rounded-[12px] border border-ink/[0.08] bg-cream p-4">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.riskLevel}</span>
-              <span className={`text-[13px] font-bold ${analysis.risk_level === "low" ? "text-orange" : analysis.risk_level === "medium" ? "text-yellow-600" : "text-red-600"}`}>
-                {analysis.risk_level.toUpperCase()}
+              <span className="text-[13px] text-ink-soft">{t.ai.requestable}</span>
+              <span className={`text-[13px] font-bold ${analysis.requestable ? "text-orange" : "text-red-600"}`}>
+                {analysis.requestable ? t.ai.yes : t.ai.no}
               </span>
             </div>
+            {!analysis.requestable && analysis.blocking_reasons.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[13px] text-ink-soft">{t.ai.blockingReasons}</span>
+                <ul className="ml-4 list-disc space-y-1">
+                  {analysis.blocking_reasons.map((reason, i) => (
+                    <li key={i} className="text-[13px] text-red-600">{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.recommendation}</span>
-              <span className="text-[13px] font-bold capitalize">{analysis.recommendation.replace(/_/g, " ")}</span>
+              <span className="text-[13px] text-ink-soft">{t.ai.availableAmount}</span>
+              <span className="text-[13px] font-bold numbers">
+                {analysis.current_available_amount_minor !== null
+                  ? formatMinorAsTenge(analysis.current_available_amount_minor)
+                  : "—"}
+              </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.remainingAfter}</span>
-              <span className="text-[13px] font-bold numbers">{formatTenge(analysis.remaining_amount)} ₸</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.reserveStatus}</span>
-              <span className="text-[13px] font-bold capitalize">{analysis.reserve_status}</span>
-            </div>
+            {analysis.max_requestable_amount_minor !== null && (
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-ink-soft">{t.ai.maxRequestable}</span>
+                <span className="text-[13px] font-bold numbers">
+                  {formatMinorAsTenge(analysis.max_requestable_amount_minor)}
+                </span>
+              </div>
+            )}
             <div className="border-t border-ink/[0.08] pt-3">
-              <p className="text-[13px] leading-relaxed text-ink-soft">{analysis.explanation}</p>
+              <p className="text-[13px] leading-relaxed text-ink-soft">{analysis.decision.status_explanation}</p>
             </div>
-            <p className="text-[11px] text-ink-soft italic">{analysis.disclaimer}</p>
+            {analysis.decision.key_facts.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[13px] text-ink-soft">{t.ai.keyFacts}</span>
+                <ul className="ml-4 list-disc space-y-1">
+                  {analysis.decision.key_facts.map((fact, i) => (
+                    <li key={i} className="text-[13px] text-ink-soft">{fact.text}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {analysis.decision.ai_metadata.fallback_used && (
+              <p className="text-[11px] text-amber-700 italic">
+                {t.ai.fallbackNotice}
+              </p>
+            )}
+            <p className="text-[11px] text-ink-soft italic">{analysis.decision.disclaimer}</p>
           </div>
         )}
       </section>
@@ -369,7 +395,40 @@ export function AIPage() {
         )}
         {chatHistory.map((item, i) => (
           <div key={i} className={`max-w-[82%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${item.from === "you" ? "ml-auto bg-ink text-cream" : "bg-orange-soft text-ink"}`}>
-            {item.text}
+            {item.from === "you" ? (
+              item.text
+            ) : (
+              <>
+                <div>{item.data.response}</div>
+                {item.data.data_limitations.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <span className="text-[11px] text-amber-700 font-semibold">{t.ai.dataLimitations}</span>
+                    <ul className="ml-3 list-disc space-y-0.5">
+                      {item.data.data_limitations.map((lim, idx) => (
+                        <li key={idx} className="text-[11px] text-amber-700">{lim}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {item.data.key_facts.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <span className="text-[11px] text-ink-soft font-semibold">{t.ai.keyFacts}</span>
+                    <ul className="ml-3 list-disc space-y-0.5">
+                      {item.data.key_facts.map((fact, idx) => (
+                        <li key={idx} className="text-[11px] text-ink-soft">{fact.text}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {item.data.ai_metadata.fallback_used && (
+                  <p className="mt-2 text-[11px] text-amber-700 italic">
+                    {t.ai.fallbackNotice}
+                    {item.data.ai_metadata.fallback_reason && ` (${item.data.ai_metadata.fallback_reason})`}
+                  </p>
+                )}
+                <p className="mt-2 text-[10px] text-ink-soft italic">{item.data.disclaimer}</p>
+              </>
+            )}
           </div>
         ))}
         {chatDisabled && sending && chatHistory.length > 0 && (
@@ -390,7 +449,7 @@ export function AIPage() {
 
 export function GetMoneyPage() {
   const { t } = useTranslation();
-  const [earned, setEarned] = useState<EarnedWages | null>(null);
+  const [calculation, setCalculation] = useState<EWAResultResponse | null>(null);
   const [requests, setRequests] = useState<WageAccessRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState("");
@@ -401,11 +460,11 @@ export function GetMoneyPage() {
 
   async function loadData() {
     try {
-      const [earnedData, requestsData] = await Promise.all([
-        api.ewa.getEarned().catch(() => null),
+      const [calculationData, requestsData] = await Promise.all([
+        api.ewa.getCalculation().catch(() => null),
         api.ewa.getRequests().catch(() => []),
       ]);
-      setEarned(earnedData);
+      setCalculation(calculationData);
       setRequests(requestsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.withdraw.unableToLoadEarned);
@@ -419,13 +478,13 @@ export function GetMoneyPage() {
   }, []);
 
   async function handleRequest() {
-    const amt = Number(amount);
+    const amt = parseAmountInput(amount);
     if (!amt || amt <= 0) {
       setError(t.withdraw.errorValid);
       return;
     }
-    if (earned && amt > earned.available_amount_minor) {
-      setError(t.withdraw.errorExceeds.replace("{amount}", formatTenge(earned.available_amount_minor)));
+    if (calculation && amt > calculation.available_amount_minor) {
+      setError(t.withdraw.errorExceeds.replace("{amount}", formatMinorAsTenge(calculation.available_amount_minor)));
       return;
     }
     setSubmitting(true);
@@ -450,9 +509,11 @@ export function GetMoneyPage() {
     </PageFrame>;
   }
 
-  const available = earned?.available_amount_minor || 0;
-  const hasEarned = earned && earned.earned_amount_minor > 0;
-  const requestedAmount = Number(amount || 0);
+  const available = calculation?.available_amount_minor || 0;
+  const earnedAmount = calculation?.earned_amount_minor || 0;
+  const accessedAmount = calculation?.paid_amount_minor || 0;
+  const hasEarned = earnedAmount > 0;
+  const requestedAmount = parseAmountInput(amount || "0");
   const remaining = Math.max(0, available - requestedAmount);
 
   return <PageFrame eyebrow="Get money" title={t.dashboard.accessEarned} copy={t.dashboard.withdrawCopy}>
@@ -465,15 +526,15 @@ export function GetMoneyPage() {
         <div className="grid grid-cols-3 gap-4">
           <div>
             <p className="text-[12px] text-ink-soft">{t.earnings.earned}</p>
-            <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.earned_amount_minor)} ₸</p>
+            <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(earnedAmount)}</p>
           </div>
           <div>
             <p className="text-[12px] text-ink-soft">{t.earnings.accessed}</p>
-            <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.accessed_amount_minor)} ₸</p>
+            <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(accessedAmount)}</p>
           </div>
           <div>
             <p className="text-[12px] text-ink-soft">{t.earnings.available}</p>
-            <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange numbers">{formatTenge(available)} ₸</p>
+            <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange numbers">{formatMinorAsTenge(available)}</p>
           </div>
         </div>
 
@@ -482,19 +543,19 @@ export function GetMoneyPage() {
           <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div className="rounded-[12px] bg-cream px-4 py-3">
               <p className="text-[12px] text-ink-soft">{t.withdraw.amountLabel}</p>
-              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(requestedAmount)} ₸</p>
+              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(requestedAmount)}</p>
             </div>
             <div className="rounded-[12px] bg-cream px-4 py-3">
               <p className="text-[12px] text-ink-soft">{t.withdraw.remaining}</p>
-              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(remaining)} ₸</p>
+              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(remaining)}</p>
             </div>
             <div className="rounded-[12px] bg-cream px-4 py-3 sm:col-span-1 col-span-2">
               <p className="text-[12px] text-ink-soft">{t.withdraw.available}</p>
-              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatTenge(available)} ₸</p>
+              <p className="mt-1 text-[20px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(available)}</p>
             </div>
           </div>
           <div className="space-y-3">
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={t.withdraw.amountUpTo.replace("{amount}", formatTenge(available))} aria-label={t.withdraw.amountToRequestAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
+            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={t.withdraw.amountUpTo.replace("{amount}", formatMinorAsTenge(available))} aria-label={t.withdraw.amountToRequestAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
             <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t.withdraw.reasonOptional} aria-label={t.withdraw.reasonAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
             <button onClick={handleRequest} disabled={submitting || !amount || Number(amount) <= 0 || Number(amount) > available} className="btn-primary w-full justify-center disabled:opacity-50">
               {submitting ? t.dashboard.submitting : t.withdraw.submit}
@@ -518,7 +579,7 @@ export function GetMoneyPage() {
           {requests.map((req) => (
             <div key={req.id} className="flex items-center justify-between rounded-[12px] border border-ink/[0.08] bg-cream px-4 py-3">
               <div>
-                <p className="font-semibold">{formatTenge(req.amount_minor)} ₸</p>
+                <p className="font-semibold">{formatMinorAsTenge(req.amount_minor)}</p>
                 <p className="text-[12px] text-ink-soft">{new Date(req.created_at).toLocaleDateString()}</p>
               </div>
               <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${
@@ -631,7 +692,7 @@ export function HistoryPage() {
                     <td className="py-4 text-ink-soft">{item.date}</td>
                     <td className="py-4 text-ink-soft capitalize">{item.type}</td>
                     <td className={`py-4 text-right font-bold numbers ${item.type === "income" ? "text-orange" : "text-orange-dark"}`}>
-                      {item.type === "income" ? "+" : "-"}{formatTenge(item.amount)} ₸
+                      {item.type === "income" ? "+" : "-"}{formatMinorAsTenge(item.amount)}
                     </td>
                   </tr>
                 ))}

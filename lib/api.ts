@@ -48,6 +48,26 @@ export interface EarnedWages {
   period_end?: string;
 }
 
+export interface EWAResultResponse {
+  salary_amount_minor: number;
+  earned_amount_minor: number;
+  policy_limit_minor: number;
+  reserved_amount_minor: number;
+  paid_amount_minor: number;
+  available_amount_minor: number;
+  pay_period_start: string;
+  pay_period_end: string;
+  calculation_date: string;
+  eligible: boolean;
+  eligibility_reasons: string[];
+  minimum_withdrawal_minor: number | null;
+  maximum_withdrawal_minor: number | null;
+  can_request_withdrawal: boolean;
+  max_withdrawals_per_period: number | null;
+  withdrawals_this_period: number;
+  max_requestable_amount_minor: number;
+}
+
 export interface WageAccessRequest {
   id: string;
   user_id: string;
@@ -78,6 +98,49 @@ export interface Goal {
   progress_pct: number;
 }
 
+export interface WithdrawalDecisionResponse {
+  requested_amount_minor: number;
+  requestable: boolean;
+  blocking_reasons: string[];
+  current_available_amount_minor: number | null;
+  max_requestable_amount_minor: number | null;
+  snapshot_only: boolean;
+  decision: StructuredDecision;
+}
+
+export interface DecisionFact {
+  code: string;
+  text: string;
+}
+
+export interface DecisionConsideration {
+  code: string;
+  text: string;
+}
+
+export interface DecisionOption {
+  code: string;
+  text: string;
+}
+
+export interface AIMetadata {
+  generated: boolean;
+  fallback_used: boolean;
+  provider: string | null;
+  model: string | null;
+}
+
+export interface StructuredDecision {
+  summary: string;
+  status_explanation: string;
+  key_facts: DecisionFact[];
+  considerations: DecisionConsideration[];
+  options: DecisionOption[];
+  data_limitations: string[];
+  disclaimer: string;
+  ai_metadata: AIMetadata;
+}
+
 export interface WithdrawalAnalysis {
   withdrawal_amount: number;
   remaining_amount: number;
@@ -95,12 +158,107 @@ export interface WithdrawalAnalysis {
   disclaimer: string;
 }
 
+export interface CopilotFact {
+  code: string;
+  text: string;
+}
+
+export interface CopilotMetadata {
+  generated: boolean;
+  fallback_used: boolean;
+  provider: string | null;
+  model: string | null;
+  fallback_reason: string | null;
+}
+
+export interface SpendingCategoryFact {
+  category: string;
+  amount_minor: number;
+  transaction_count: number;
+}
+
+export interface AuthoritativeCopilotFacts {
+  calculation_date: string | null;
+  pay_period_start: string | null;
+  pay_period_end: string | null;
+  salary_amount_minor: number | null;
+  currency: string | null;
+  earned_amount_minor: number | null;
+  policy_limit_minor: number | null;
+  reserved_amount_minor: number | null;
+  paid_amount_minor: number | null;
+  available_amount_minor: number | null;
+  max_requestable_amount_minor: number | null;
+  minimum_withdrawal_minor: number | null;
+  maximum_withdrawal_minor: number | null;
+  eligible: boolean | null;
+  eligibility_reasons: string[];
+  can_request_withdrawal: boolean | null;
+  withdrawals_this_period: number | null;
+  max_withdrawals_per_period: number | null;
+  total_withdrawal_requests: number | null;
+  pending_withdrawal_count: number | null;
+  approved_withdrawal_count: number | null;
+  paid_withdrawal_count: number | null;
+  paid_withdrawal_amount_minor: number | null;
+  spending_available: boolean | null;
+  total_spending_minor: number | null;
+  transaction_count: number | null;
+  top_spending_categories: SpendingCategoryFact[];
+  budget_available: boolean | null;
+  budget_total_minor: number | null;
+  budget_spent_minor: number | null;
+  budget_remaining_minor: number | null;
+  goals_available: boolean | null;
+  active_goals_count: number | null;
+  total_goal_target_minor: number | null;
+  total_goal_saved_minor: number | null;
+  has_salary_profile: boolean | null;
+  has_ewa_policy: boolean | null;
+  has_transactions: boolean | null;
+  has_budget: boolean | null;
+  has_goals: boolean | null;
+  missing_data: string[];
+  availability_note: string;
+}
+
+export interface CopilotResponse {
+  response: string;
+  key_facts: CopilotFact[];
+  data_limitations: string[];
+  suggested_questions: string[];
+  disclaimer: string;
+  authoritative_facts: AuthoritativeCopilotFacts;
+  withdrawal_analysis: WithdrawalAnalysis | null;
+  conversation_id: string | null;
+  conversation_persisted: boolean;
+  ai_metadata: CopilotMetadata;
+  read_only: boolean;
+  snapshot_only: boolean;
+}
+
 class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  retryAfter: number | null;
+  constructor(message: string, status: number, retryAfter: number | null = null) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header.trim());
+  if (!Number.isNaN(seconds) && Number.isFinite(seconds)) {
+    return Math.max(0, seconds);
+  }
+  const date = new Date(header);
+  if (!Number.isNaN(date.getTime())) {
+    const diff = Math.floor((date.getTime() - Date.now()) / 1000);
+    return Math.max(0, diff);
+  }
+  return null;
 }
 
 function getToken(): string | null {
@@ -275,6 +433,9 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  const method = (options.method || "GET").toUpperCase();
+  const isIdempotent = method === "GET" || method === "HEAD" || method === "OPTIONS";
+
   let lastError: Error | null = null;
   let attemptedRefresh = false;
 
@@ -286,6 +447,9 @@ async function request<T>(
       });
 
       if (!response.ok) {
+        const retryAfterHeader = response.headers?.get?.("Retry-After") ?? null;
+        const retryAfter = parseRetryAfter(retryAfterHeader);
+
         if (response.status === 401 && !attemptedRefresh && !path.startsWith("/auth/")) {
           attemptedRefresh = true;
           const refreshed = await refreshOnce();
@@ -301,6 +465,29 @@ async function request<T>(
             window.location.href = "/login";
           }
         }
+
+        if (response.status === 429) {
+          const message = retryAfter !== null
+            ? `Rate limited. Please try again in ${retryAfter} second${retryAfter === 1 ? "" : "s"}.`
+            : "Rate limited. Please try again later.";
+          throw new ApiError(message, 429, retryAfter);
+        }
+
+        if (response.status === 403) {
+          throw new ApiError("Permission denied. You do not have access to this resource.", 403);
+        }
+
+        if (response.status >= 500 && response.status < 600) {
+          const messages: Record<number, string> = {
+            500: "Server error. Please try again later.",
+            502: "Service temporarily unavailable. Please try again later.",
+            503: "Service unavailable. Please try again later.",
+            504: "Gateway timeout. Please try again later.",
+          };
+          const message = messages[response.status] || "Server error. Please try again later.";
+          throw new ApiError(message, response.status);
+        }
+
         const body = await response.json().catch(() => ({}));
         const detail = body?.detail || body?.message || `HTTP ${response.status}`;
         throw new ApiError(detail, response.status);
@@ -313,7 +500,17 @@ async function request<T>(
       return response.json();
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < retries && !(lastError instanceof ApiError)) {
+
+      // Retry on network errors only for idempotent requests; retry 429 for idempotent
+      const shouldRetry = attempt < retries
+        && !(lastError instanceof ApiError)
+        && isIdempotent
+        || (lastError instanceof ApiError
+            && lastError.status === 429
+            && isIdempotent
+            && attempt < retries);
+
+      if (shouldRetry) {
         await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
       } else {
         break;
@@ -435,19 +632,20 @@ export const api = {
     updateEarned: (data: { earned_amount_minor: number }) =>
       request<EarnedWages>("/ewa/earned", { method: "PUT", body: JSON.stringify(data) }),
     getAvailable: () => request<{ available_amount_minor: number }>("/ewa/available"),
+    getCalculation: () => request<EWAResultResponse>("/ewa/calculation"),
     createRequest: (data: { amount_minor: number; reason?: string }) =>
       request<WageAccessRequest>("/ewa/request", { method: "POST", body: JSON.stringify(data) }),
     getRequests: () => request<WageAccessRequest[]>("/ewa/requests"),
   },
 
   ai: {
-    analyzeWithdrawal: (withdrawal_amount: number) =>
-      request<WithdrawalAnalysis>("/ai/analyze-withdrawal", {
+    analyzeWithdrawal: (amount_tenge: number) =>
+      request<WithdrawalDecisionResponse>("/financial/withdrawal-decision", {
         method: "POST",
-        body: JSON.stringify({ withdrawal_amount }),
+        body: JSON.stringify({ amount_minor: Math.round(amount_tenge * 100) }),
       }),
     chat: (message: string, conversation_id?: string) =>
-      request<{ response: string; disclaimer: string }>("/ai/chat", {
+      request<CopilotResponse>("/ai/chat", {
         method: "POST",
         body: JSON.stringify({ message, conversation_id }),
       }),
