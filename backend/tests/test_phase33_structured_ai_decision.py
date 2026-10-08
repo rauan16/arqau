@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 from app.core.database import Base, configure_database, create_database
 from app.core.auth_rate_limit import _reset_all_limiters
+from app.core.rate_limit import get_provider_limiter, get_total_limiter
 from app.config import get_settings
 from app.database import get_db
 from app.main import app
@@ -119,6 +120,8 @@ SUBJECTIVE_LEAK = ("risk_score", "safe", "dangerous", "good", "bad", "smart", "s
 class Phase33StructuredAIDecisionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         _reset_all_limiters()
+        get_provider_limiter().reset()
+        get_total_limiter().reset()
         self.temp_dir = tempfile.TemporaryDirectory()
         database_path = Path(self.temp_dir.name) / "phase33.db"
         self.database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"

@@ -732,7 +732,7 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         # Mon-Fri working days in the accrual window // total Mon-Fri working
         # days in the calendar month. Compute the expected value from the
         # contract rather than hardcoding a wall-clock-specific number.
-        calc_date = date.today()
+        calc_date = datetime.utcnow().date()
         period_start, period_end = _get_pay_period(calc_date)
         total_working_days = _count_working_days(period_start, period_end)
         elapsed_working_days = _count_working_days(period_start, calc_date)
@@ -957,7 +957,7 @@ class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(data["available_amount_minor"], 999999999)
         # Compute the expected engine value from the contract instead of a
         # wall-clock-specific hardcoded number.
-        calc_date = date.today()
+        calc_date = datetime.utcnow().date()
         period_start, period_end = _get_pay_period(calc_date)
         total_working_days = _count_working_days(period_start, period_end)
         elapsed_working_days = _count_working_days(period_start, calc_date)
