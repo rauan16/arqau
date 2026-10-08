@@ -11,6 +11,27 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 Environment = Literal["development", "testing", "production"]
 DEFAULT_DEVELOPMENT_SECRET_KEY = "arqau-development-only-secret"
 
+# Known placeholder/weak secrets that should be rejected in production
+KNOWN_WEAK_SECRETS = {
+    "arqau-secret-key-change-in-production",
+    "change-me",
+    "change-me-in-production",
+    "secret",
+    "secretkey",
+    "dev-secret",
+    "test-secret",
+    "placeholder",
+    "your-secret-here",
+    "your-secret-key-here",
+}
+
+# Minimum entropy threshold for production secret (characters)
+MIN_SECRET_ENTROPY = 32
+
+# Reasonable bounds for access token TTL (minutes)
+MIN_ACCESS_TOKEN_TTL = 1
+MAX_ACCESS_TOKEN_TTL = 1440  # 24 hours
+
 
 def _environment_value() -> str:
     return os.getenv(
@@ -41,16 +62,32 @@ class Settings(BaseModel):
             return self
 
         errors = []
-        if not self.secret_key.strip() or self.secret_key == "arqau-secret-key-change-in-production":
+        # Secret key validation
+        if not self.secret_key.strip():
             errors.append("SECRET_KEY must be set to a production-specific value")
+        elif self.secret_key == "arqau-secret-key-change-in-production":
+            errors.append("SECRET_KEY must be set to a production-specific value")
+        elif self.secret_key in KNOWN_WEAK_SECRETS:
+            errors.append("SECRET_KEY must not be a known weak or placeholder value")
+        elif len(self.secret_key) < MIN_SECRET_ENTROPY:
+            errors.append(f"SECRET_KEY must be at least {MIN_SECRET_ENTROPY} characters for production")
+
+        # JWT issuer/audience validation
+        if not self.jwt_issuer.strip():
+            errors.append("JWT_ISSUER must be set and non-empty")
+        if not self.jwt_audience.strip():
+            errors.append("JWT_AUDIENCE must be set and non-empty")
+
+        # Access token TTL bounds
+        if not (MIN_ACCESS_TOKEN_TTL <= self.access_token_expire_minutes <= MAX_ACCESS_TOKEN_TTL):
+            errors.append(f"ACCESS_TOKEN_EXPIRE_MINUTES must be between {MIN_ACCESS_TOKEN_TTL} and {MAX_ACCESS_TOKEN_TTL}")
+
         if not self.database_url:
             errors.append("DATABASE_URL is required")
         elif not self.is_postgresql:
             errors.append("DATABASE_URL must use PostgreSQL in production")
         if not self.openai_api_key.strip():
             errors.append("OPENAI_API_KEY is required")
-        if self.access_token_expire_minutes <= 0:
-            errors.append("ACCESS_TOKEN_EXPIRE_MINUTES must be positive")
         if self.refresh_token_expire_days <= 0:
             errors.append("REFRESH_TOKEN_EXPIRE_DAYS must be positive")
         if errors:
