@@ -633,8 +633,15 @@ export const api = {
       request<EarnedWages>("/ewa/earned", { method: "PUT", body: JSON.stringify(data) }),
     getAvailable: () => request<{ available_amount_minor: number }>("/ewa/available"),
     getCalculation: () => request<EWAResultResponse>("/ewa/calculation"),
-    createRequest: (data: { amount_minor: number; reason?: string }) =>
-      request<WageAccessRequest>("/ewa/request", { method: "POST", body: JSON.stringify(data) }),
+    createRequest: (data: { amount_minor: number; reason?: string; idempotencyKey?: string }) =>
+      request<WageAccessRequest>("/ewa/request", {
+        method: "POST",
+        body: JSON.stringify({
+          amount_minor: data.amount_minor,
+          reason: data.reason,
+          idempotency_key: data.idempotencyKey,
+        }),
+      }),
     getRequests: () => request<WageAccessRequest[]>("/ewa/requests"),
   },
 

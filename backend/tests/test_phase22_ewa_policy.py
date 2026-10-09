@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.main import app
 from app.models import EwaPolicy
+from app.core.auth_rate_limit import _reset_all_limiters
 
 os.environ.setdefault("APP_ENV", "testing")
 os.environ.setdefault("SECRET_KEY", "test-secret")
@@ -26,6 +27,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 class Phase22EwaPolicyTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        _reset_all_limiters()
         self.temp_dir = tempfile.TemporaryDirectory()
         database_path = Path(self.temp_dir.name) / "ewa_policy.db"
         self.database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"

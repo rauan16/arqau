@@ -43,24 +43,24 @@ function EarningsCard({ calculation }: { calculation: EWAResultResponse | null }
     <section className={panel}>
       <div className="flex items-center gap-2 text-orange">
         <Wallet size={17} />
-        <p className="text-[12px] font-bold uppercase tracking-[0.1em]">{t.dashboard.earnedTitle}</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.1em]">{t.earnings.title}</p>
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-4">
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.earnedTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.earned_amount_minor)}</p>
+      <div className="mt-6">
+        <p className="text-[13px] font-semibold text-ink-soft uppercase tracking-[0.05em] mb-2">{t.earnings.availableToWithdraw}</p>
+        <p className="text-[48px] font-extrabold tracking-tight text-orange numbers">{formatMinorAsTenge(calculation.available_amount_minor)}</p>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-ink/[0.06]">
+        <div className="flex flex-col items-center text-center p-3 rounded-[12px] bg-cream-soft">
+          <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-[0.05em]">{t.earnings.earnedThisPeriod}</p>
+          <p className="mt-1 text-[22px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.earned_amount_minor)}</p>
         </div>
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.accessedTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.paid_amount_minor)}</p>
-        </div>
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.availableTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange numbers">{formatMinorAsTenge(calculation.available_amount_minor)}</p>
+        <div className="flex flex-col items-center text-center p-3 rounded-[12px] bg-cream-soft">
+          <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-[0.05em]">{t.earnings.alreadyWithdrawn}</p>
+          <p className="mt-1 text-[22px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.paid_amount_minor)}</p>
         </div>
       </div>
-      <div className="mt-5 border-t border-ink/[0.06] pt-4">
-        <p className="text-[12px] text-ink-soft">{t.earnings.authoritativeNote}</p>
+      <div className="mt-4 pt-3 border-t border-ink/[0.06]">
+        <p className="text-[12px] text-ink-soft">{t.earnings.availableExplanation}</p>
       </div>
     </section>
   );

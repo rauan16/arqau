@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, CircleDollarSign, Plus, Search, Send, Sparkles, TrendingDown, TrendingUp, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowRight, Check, CircleDollarSign, Plus, Search, Send, Sparkles, TrendingDown, TrendingUp, AlertCircle, Loader2, Shield, CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Wallet, CreditCard, Target, Flag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/lib/language-context";
-import { api, Transaction, FinanceSummary, WageAccessRequest, WithdrawalDecisionResponse, StructuredDecision, EWAResultResponse, CopilotResponse, CopilotFact, CopilotMetadata, AuthoritativeCopilotFacts } from "@/lib/api";
+import { api, Transaction, FinanceSummary, WageAccessRequest, WithdrawalDecisionResponse, StructuredDecision, EWAResultResponse, CopilotResponse, CopilotFact, CopilotMetadata, AuthoritativeCopilotFacts, WithdrawalAnalysis } from "@/lib/api";
 import { formatMinorAsTenge, parseAmountInput } from "@/lib/money";
+import { validateWithdrawalAmount } from "@/lib/withdrawal-validation";
 
 const panel = "rounded-[16px] border border-ink/[0.07] bg-white/70 p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)]";
 
@@ -20,6 +21,21 @@ function PageFrame({ eyebrow, title, copy, children }: { eyebrow: string; title:
     </div>
     {children}
   </div>;
+}
+
+function ExpandableSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details className="group" open={defaultOpen}>
+      <summary className="flex items-center justify-between cursor-pointer list-none select-none px-3 py-2 rounded-[8px] bg-cream/50 hover:bg-cream transition-colors">
+        <span className="text-[12px] font-semibold text-ink-soft flex items-center gap-2">{title}</span>
+        <ChevronDown size={14} className="text-ink-soft transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-2 p-3 rounded-[8px] bg-cream/30 animate-in slide-in-from-top-1 duration-150">
+        {children}
+      </div>
+    </details>
+  );
 }
 
 function Metric({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
@@ -179,10 +195,17 @@ export function AIPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [message, setMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState<Array<{ from: "you"; text: string } | { from: "arqau"; data: CopilotResponse }>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<
+    { from: "you"; text: string } |
+    { from: "arqau"; data: CopilotResponse } |
+    { from: "arqau"; loading: true; conversationId?: string | null } |
+    { from: "arqau"; error: string; retry: () => Promise<void>; conversationId?: string | null }
+  >>([]);
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatDisabled, setChatDisabled] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   async function loadCalculation() {
     try {
@@ -219,40 +242,97 @@ export function AIPage() {
     }
   }
 
+  function getErrorMessage(err: unknown): string {
+    if (err instanceof Error) {
+      const msg = err.message;
+      if (msg.includes("429") || msg.includes("rate limit") || msg.includes("Too many requests")) {
+        return t.ai.rateLimited;
+      }
+      if (msg.includes("503") || msg.includes("service unavailable") || msg.includes("unavailable")) {
+        return t.ai.serviceUnavailable;
+      }
+      if (msg.includes("network") || msg.includes("fetch") || msg.includes("connection")) {
+        return t.ai.networkError;
+      }
+      return msg;
+    }
+    return t.ai.chatFailed;
+  }
+
   async function handleChat(e: React.FormEvent) {
     e.preventDefault();
     if (!message.trim() || sending) return;
     const userMsg = message.trim();
     setMessage("");
-    setChatHistory((h) => [...h, { from: "you", text: userMsg }]);
+    setPendingUserMessage(userMsg);
+    setChatHistory((h) => [
+      ...h,
+      { from: "you", text: userMsg },
+      { from: "arqau", loading: true, conversationId },
+    ]);
     setSending(true);
     setChatError("");
     setChatDisabled(true);
     try {
-      const result = await api.ai.chat(userMsg);
-      setChatHistory((h) => [...h, { from: "arqau", data: result }]);
+      const result = await api.ai.chat(userMsg, conversationId || undefined);
+      setConversationId(result.conversation_id);
+      setChatHistory((h) => {
+        const withoutLoading = h.slice(0, -1);
+        return [...withoutLoading, { from: "arqau", data: result }];
+      });
+      setPendingUserMessage(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t.ai.chatFailed;
-      setChatError(msg);
-      setChatHistory((h) => h.slice(0, -1));
+      const errorMsg = getErrorMessage(err);
+      setChatHistory((h) => {
+        const withoutLoading = h.slice(0, -1);
+        return [
+          ...withoutLoading,
+          {
+            from: "arqau",
+            error: errorMsg,
+            retry: () => handleRetryChat(userMsg),
+            conversationId,
+          },
+        ];
+      });
     } finally {
       setSending(false);
       setChatDisabled(false);
     }
   }
 
-  async function handleRetryChat() {
-    if (!message.trim() || sending) return;
+  async function handleRetryChat(userMsg?: string) {
+    const msg = userMsg || pendingUserMessage;
+    if (!msg || sending) return;
     setChatError("");
     setSending(true);
     setChatDisabled(true);
+    setChatHistory((h) => {
+      const withoutError = h.slice(0, -1);
+      return [...withoutError, { from: "arqau", loading: true, conversationId }];
+    });
     try {
-      const result = await api.ai.chat(message.trim());
-      setChatHistory((h) => [...h, { from: "arqau", data: result }]);
-      setMessage("");
+      const result = await api.ai.chat(msg, conversationId || undefined);
+      setConversationId(result.conversation_id);
+      setChatHistory((h) => {
+        const withoutLoading = h.slice(0, -1);
+        return [...withoutLoading, { from: "arqau", data: result }];
+      });
+      setPendingUserMessage(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t.ai.chatFailed;
-      setChatError(msg);
+      const errorMsg = getErrorMessage(err);
+      setChatHistory((h) => {
+        const withoutLoading = h.slice(0, -1);
+        return [
+          ...withoutLoading,
+          {
+            from: "arqau",
+            error: errorMsg,
+            retry: () => handleRetryChat(msg),
+            conversationId,
+          },
+        ];
+      });
     } finally {
       setSending(false);
       setChatDisabled(false);
@@ -311,61 +391,61 @@ export function AIPage() {
             {analysisError}
           </div>
         )}
-        {analysis && !analyzing && (
-          <div className="mt-4 space-y-3 rounded-[12px] border border-ink/[0.08] bg-cream p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.requestable}</span>
-              <span className={`text-[13px] font-bold ${analysis.requestable ? "text-orange" : "text-red-600"}`}>
-                {analysis.requestable ? t.ai.yes : t.ai.no}
-              </span>
-            </div>
-            {!analysis.requestable && analysis.blocking_reasons.length > 0 && (
-              <div className="space-y-1">
-                <span className="text-[13px] text-ink-soft">{t.ai.blockingReasons}</span>
-                <ul className="ml-4 list-disc space-y-1">
-                  {analysis.blocking_reasons.map((reason, i) => (
-                    <li key={i} className="text-[13px] text-red-600">{reason}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-ink-soft">{t.ai.availableAmount}</span>
-              <span className="text-[13px] font-bold numbers">
-                {analysis.current_available_amount_minor !== null
-                  ? formatMinorAsTenge(analysis.current_available_amount_minor)
-                  : "—"}
-              </span>
-            </div>
-            {analysis.max_requestable_amount_minor !== null && (
+{analysis && !analyzing && (
+            <div className="mt-4 space-y-3 rounded-[12px] border border-ink/[0.08] bg-cream p-4">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] text-ink-soft">{t.ai.maxRequestable}</span>
-                <span className="text-[13px] font-bold numbers">
-                  {formatMinorAsTenge(analysis.max_requestable_amount_minor)}
+                <span className="text-[13px] text-ink-soft">{t.ai.requestable}</span>
+                <span className={`text-[13px] font-bold ${analysis.requestable ? "text-orange" : "text-red-600"}`}>
+                  {analysis.requestable ? t.ai.yes : t.ai.no}
                 </span>
               </div>
-            )}
-            <div className="border-t border-ink/[0.08] pt-3">
-              <p className="text-[13px] leading-relaxed text-ink-soft">{analysis.decision.status_explanation}</p>
-            </div>
-            {analysis.decision.key_facts.length > 0 && (
-              <div className="space-y-1">
-                <span className="text-[13px] text-ink-soft">{t.ai.keyFacts}</span>
-                <ul className="ml-4 list-disc space-y-1">
-                  {analysis.decision.key_facts.map((fact, i) => (
-                    <li key={i} className="text-[13px] text-ink-soft">{fact.text}</li>
-                  ))}
-                </ul>
+              {!analysis.requestable && analysis.blocking_reasons.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[13px] text-ink-soft">{t.ai.blockingReasons}</span>
+                  <ul className="ml-4 list-disc space-y-1">
+                    {analysis.blocking_reasons.map((reason, i) => (
+                      <li key={i} className="text-[13px] text-red-600">{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] text-ink-soft">{t.ai.availableAmount}</span>
+                <span className="text-[13px] font-bold numbers">
+                  {analysis.current_available_amount_minor !== null
+                    ? formatMinorAsTenge(analysis.current_available_amount_minor)
+                    : "—"}
+                </span>
               </div>
-            )}
-            {analysis.decision.ai_metadata.fallback_used && (
-              <p className="text-[11px] text-amber-700 italic">
-                {t.ai.fallbackNotice}
-              </p>
-            )}
-            <p className="text-[11px] text-ink-soft italic">{analysis.decision.disclaimer}</p>
-          </div>
-        )}
+              {analysis.max_requestable_amount_minor !== null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-ink-soft">{t.ai.maxRequestable}</span>
+                  <span className="text-[13px] font-bold numbers">
+                    {formatMinorAsTenge(analysis.max_requestable_amount_minor)}
+                  </span>
+                </div>
+              )}
+              <div className="border-t border-ink/[0.08] pt-3">
+                <p className="text-[13px] leading-relaxed text-ink-soft">{analysis.decision.status_explanation}</p>
+              </div>
+              {analysis.decision.key_facts.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-[13px] text-ink-soft">{t.ai.keyFacts}</span>
+                  <ul className="ml-4 list-disc space-y-1">
+                    {analysis.decision.key_facts.map((fact, i) => (
+                      <li key={i} className="text-[13px] text-ink-soft">{fact.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {analysis.decision.ai_metadata.fallback_used && (
+                <p className="text-[11px] text-amber-700 italic">
+                  {t.ai.fallbackNotice}
+                </p>
+              )}
+              <p className="text-[11px] text-ink-soft italic">{analysis.decision.disclaimer}</p>
+            </div>
+          )}
       </section>
       <aside className="rounded-[20px] border border-orange/20 bg-orange-soft p-5">
         <div className="flex items-center gap-2 text-orange"><Sparkles size={18} /><h2 className="font-bold">Suggested questions</h2></div>
@@ -384,27 +464,157 @@ export function AIPage() {
       {chatError && (
         <div className="mb-3 rounded-[10px] border border-yellow-200 bg-yellow-50 px-4 py-3 text-[13px] text-yellow-800 flex items-center justify-between gap-3">
           <span>{t.ai.unavailable}. Withdrawal analysis is still available above.</span>
-          <button onClick={handleRetryChat} disabled={sending || chatDisabled || !message.trim()} className="shrink-0 rounded-[8px] border border-yellow-300 bg-yellow-100 px-3 py-1.5 text-[12px] font-bold text-yellow-900 transition-colors hover:bg-yellow-200 disabled:opacity-50">
+          <button onClick={() => handleRetryChat()} disabled={sending || chatDisabled || !message.trim()} className="shrink-0 rounded-[8px] border border-yellow-300 bg-yellow-100 px-3 py-1.5 text-[12px] font-bold text-yellow-900 transition-colors hover:bg-yellow-200 disabled:opacity-50">
             Retry
           </button>
         </div>
       )}
-      <div className="max-h-[320px] space-y-3 overflow-y-auto">
+<div className="max-h-[320px] space-y-3 overflow-y-auto" role="log" aria-live="polite" aria-atomic="false">
         {chatHistory.length === 0 && !chatDisabled && (
-          <p className="text-[13px] text-ink-soft">Ask questions about your financial context...</p>
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-soft">Ask questions about your financial context...</p>
+            {contextualPrompts.length > 0 && (
+              <div className="flex flex-wrap gap-2" role="list" aria-label={t.ai.suggestedQuestions}>
+                {contextualPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setMessage(prompt)}
+                    className="rounded-[8px] border border-orange/20 bg-cream px-3 py-1.5 text-left text-[12px] font-semibold text-orange transition-colors hover:bg-orange hover:text-cream"
+                    role="listitem"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {chatHistory.map((item, i) => (
           <div key={i} className={`max-w-[82%] rounded-[16px] px-4 py-3 text-[14px] leading-relaxed ${item.from === "you" ? "ml-auto bg-ink text-cream" : "bg-orange-soft text-ink"}`}>
             {item.from === "you" ? (
               item.text
+            ) : "loading" in item ? (
+              <div aria-live="polite" aria-atomic="true" className="inline-flex items-center gap-2 text-ink-soft"><Loader2 className="animate-spin" size={14} /> {t.dashboard.analyzing}</div>
+            ) : "error" in item ? (
+              <>
+                <div aria-live="assertive" aria-atomic="true" className="text-red-600">{item.error}</div>
+                <button onClick={item.retry} className="mt-2 text-[12px] font-bold text-orange underline">{t.ai.retry}</button>
+              </>
             ) : (
               <>
                 <div>{item.data.response}</div>
+                {item.data.authoritative_facts && (
+                  <ExpandableSection title={t.ai.authoritativeFacts}>
+                    <div className="space-y-3 text-[12px]">
+                      <div>
+                        <p className="font-semibold text-ink">{t.ai.ewa}</p>
+                        <div className="grid gap-2 text-[11px] mt-1">
+                          {item.data.authoritative_facts.earned_amount_minor !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Earned</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.authoritative_facts.earned_amount_minor)}</span></div>
+                          )}
+                          {item.data.authoritative_facts.available_amount_minor !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Available</span><span className="font-bold text-orange numbers">{formatMinorAsTenge(item.data.authoritative_facts.available_amount_minor)}</span></div>
+                          )}
+                          {item.data.authoritative_facts.max_requestable_amount_minor !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Max requestable</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.authoritative_facts.max_requestable_amount_minor)}</span></div>
+                          )}
+                          {item.data.authoritative_facts.paid_amount_minor !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Paid</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.authoritative_facts.paid_amount_minor)}</span></div>
+                          )}
+                          {item.data.authoritative_facts.reserved_amount_minor !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Reserved</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.authoritative_facts.reserved_amount_minor)}</span></div>
+                          )}
+                          {item.data.authoritative_facts.eligible !== null && (
+                            <div className="flex justify-between"><span className="text-ink-soft">Eligible</span><span className="font-bold">{item.data.authoritative_facts.eligible ? t.ai.yes : t.ai.no}</span></div>
+                          )}
+                        </div>
+                      </div>
+                      {item.data.authoritative_facts.spending_available && (
+                        <div>
+                          <p className="font-semibold text-ink">{t.ai.spending}</p>
+                          <div className="grid gap-2 text-[11px] mt-1">
+                            <div className="flex justify-between"><span className="text-ink-soft">Total spending</span><span className="font-bold numbers">{item.data.authoritative_facts.total_spending_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.total_spending_minor) : "—"}</span></div>
+                            <div className="flex justify-between"><span className="text-ink-soft">Transactions</span><span className="font-bold">{item.data.authoritative_facts.transaction_count !== null ? item.data.authoritative_facts.transaction_count : "—"}</span></div>
+                          </div>
+                        </div>
+                      )}
+                      {item.data.authoritative_facts.budget_available && (
+                        <div>
+                          <p className="font-semibold text-ink">{t.ai.budget}</p>
+                          <div className="grid gap-2 text-[11px] mt-1">
+                            <div className="flex justify-between"><span className="text-ink-soft">Total</span><span className="font-bold numbers">{item.data.authoritative_facts.budget_total_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.budget_total_minor) : "—"}</span></div>
+                            <div className="flex justify-between"><span className="text-ink-soft">Spent</span><span className="font-bold numbers">{item.data.authoritative_facts.budget_spent_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.budget_spent_minor) : "—"}</span></div>
+                            <div className="flex justify-between"><span className="text-ink-soft">Remaining</span><span className="font-bold numbers">{item.data.authoritative_facts.budget_remaining_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.budget_remaining_minor) : "—"}</span></div>
+                          </div>
+                        </div>
+                      )}
+                      {item.data.authoritative_facts.goals_available && (
+                        <div>
+                          <p className="font-semibold text-ink">{t.ai.goals}</p>
+                          <div className="grid gap-2 text-[11px] mt-1">
+                            <div className="flex justify-between"><span className="text-ink-soft">Active goals</span><span className="font-bold">{item.data.authoritative_facts.active_goals_count !== null ? item.data.authoritative_facts.active_goals_count : "—"}</span></div>
+                            <div className="flex justify-between"><span className="text-ink-soft">Target</span><span className="font-bold numbers">{item.data.authoritative_facts.total_goal_target_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.total_goal_target_minor) : "—"}</span></div>
+                            <div className="flex justify-between"><span className="text-ink-soft">Saved</span><span className="font-bold numbers">{item.data.authoritative_facts.total_goal_saved_minor !== null ? formatMinorAsTenge(item.data.authoritative_facts.total_goal_saved_minor) : "—"}</span></div>
+                          </div>
+                        </div>
+                      )}
+                      {item.data.authoritative_facts.missing_data.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-ink">{t.ai.missingData}</p>
+                          <ul className="ml-3 list-disc space-y-1 text-[11px] text-amber-700 mt-1">
+                            {item.data.authoritative_facts.missing_data.map((m: string, idx: number) => (
+                              <li key={idx}>{m}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </ExpandableSection>
+                )}
+                {item.data.withdrawal_analysis && (
+                  <ExpandableSection title={t.ai.withdrawalAnalysisLabel}>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="flex items-center gap-2 rounded-[10px] bg-cream p-3">
+                        <CheckCircle size={16} className={item.data.withdrawal_analysis.covered_expenses ? "text-orange" : "text-red-600"} />
+                        <div>
+                          <p className="text-[11px] text-ink-soft">{t.ai.coveredExpenses}</p>
+                          <p className="text-[13px] font-bold">{item.data.withdrawal_analysis.covered_expenses ? t.ai.coveredExpensesYes : t.ai.coveredExpensesNo}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-[10px] bg-cream p-3">
+                        <Target size={16} className="text-orange" />
+                        <div>
+                          <p className="text-[11px] text-ink-soft">{t.ai.reserveStatusLabel}</p>
+                          <p className="text-[13px] font-bold capitalize">{item.data.withdrawal_analysis.reserve_status}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-[10px] bg-cream p-3">
+                        <AlertTriangle size={16} className="text-orange" />
+                        <div>
+                          <p className="text-[11px] text-ink-soft">{t.ai.riskLevelLabel}</p>
+                          <p className="text-[13px] font-bold capitalize">{item.data.withdrawal_analysis.risk_level}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-[12px]">
+                      <div className="flex justify-between"><span className="text-ink-soft">Withdrawal amount</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.withdrawal_amount)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Remaining</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.remaining_amount)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Available</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.available_amount)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Earned</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.earned_amount)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Accessed</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.accessed_amount)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Total income</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.total_income)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Total expenses</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.total_expenses)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Net balance</span><span className="font-bold numbers">{formatMinorAsTenge(item.data.withdrawal_analysis.net_balance)}</span></div>
+                      <div className="flex justify-between"><span className="text-ink-soft">Recommendation</span><span className="font-bold">{item.data.withdrawal_analysis.recommendation}</span></div>
+                    </div>
+                  </ExpandableSection>
+                )}
                 {item.data.data_limitations.length > 0 && (
                   <div className="mt-2 space-y-1">
                     <span className="text-[11px] text-amber-700 font-semibold">{t.ai.dataLimitations}</span>
                     <ul className="ml-3 list-disc space-y-0.5">
-                      {item.data.data_limitations.map((lim, idx) => (
+                      {item.data.data_limitations.map((lim: string, idx: number) => (
                         <li key={idx} className="text-[11px] text-amber-700">{lim}</li>
                       ))}
                     </ul>
@@ -414,7 +624,7 @@ export function AIPage() {
                   <div className="mt-2 space-y-1">
                     <span className="text-[11px] text-ink-soft font-semibold">{t.ai.keyFacts}</span>
                     <ul className="ml-3 list-disc space-y-0.5">
-                      {item.data.key_facts.map((fact, idx) => (
+                      {item.data.key_facts.map((fact: CopilotFact, idx: number) => (
                         <li key={idx} className="text-[11px] text-ink-soft">{fact.text}</li>
                       ))}
                     </ul>
@@ -432,7 +642,7 @@ export function AIPage() {
           </div>
         ))}
         {chatDisabled && sending && chatHistory.length > 0 && (
-          <div className="max-w-[82%] rounded-[16px] bg-orange-soft px-4 py-3 text-[14px] leading-relaxed">
+          <div aria-live="polite" aria-atomic="true" className="max-w-[82%] rounded-[16px] bg-orange-soft px-4 py-3 text-[14px] leading-relaxed">
             <span className="inline-flex items-center gap-2 text-ink-soft"><Loader2 className="animate-spin" size={14} /> {t.dashboard.analyzing}</span>
           </div>
         )}
@@ -457,6 +667,16 @@ export function GetMoneyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+
+  function generateIdempotencyKey(): string {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  function resetIdempotencyKey() {
+    setIdempotencyKey(generateIdempotencyKey());
+  }
 
   async function loadData() {
     try {
@@ -477,23 +697,59 @@ export function GetMoneyPage() {
     loadData();
   }, []);
 
+  const getAvailableMinor = () => calculation?.available_amount_minor || 0;
+
+  function validateAmount(value: string) {
+    const result = validateWithdrawalAmount(value, getAvailableMinor(), (key) => t[key as keyof typeof t] as string);
+    if (result.errorKey && result.errorParams) {
+      let message = t[result.errorKey as keyof typeof t] as string;
+      Object.entries(result.errorParams).forEach(([key, val]) => {
+        message = message.replace(`{${key}}`, val);
+      });
+      return message;
+    }
+    return result.errorKey ? (t[result.errorKey as keyof typeof t] as string) : null;
+  }
+
+  function handleAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value;
+    if (value !== amount) {
+      setIdempotencyKey(generateIdempotencyKey());
+    }
+    setAmount(value);
+    setError(null);
+    const validationError = validateAmount(value);
+    setAmountError(validationError);
+  }
+
   async function handleRequest() {
-    const amt = parseAmountInput(amount);
-    if (!amt || amt <= 0) {
-      setError(t.withdraw.errorValid);
+    const validationError = validateAmount(amount);
+    if (validationError) {
+      setAmountError(validationError);
       return;
     }
-    if (calculation && amt > calculation.available_amount_minor) {
-      setError(t.withdraw.errorExceeds.replace("{amount}", formatMinorAsTenge(calculation.available_amount_minor)));
+    const amt = parseAmountInput(amount);
+    if (!amt || amt <= 0) {
+      setAmountError(t.withdraw.errorValid);
       return;
+    }
+    if (!idempotencyKey) {
+      resetIdempotencyKey();
     }
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    setAmountError(null);
     try {
-      await api.ewa.createRequest({ amount_minor: amt, reason: reason || undefined });
+      const latestCalculation = await api.ewa.getCalculation().catch(() => null);
+      if (latestCalculation && amt > latestCalculation.available_amount_minor) {
+        setAmountError(t.withdraw.errorExceeds.replace("{amount}", formatMinorAsTenge(latestCalculation.available_amount_minor)));
+        return;
+      }
+      await api.ewa.createRequest({ amount_minor: amt, reason: reason || undefined, idempotencyKey: idempotencyKey || undefined });
       setAmount("");
       setReason("");
+      setIdempotencyKey(null);
       setSuccess(t.withdraw.success);
       await loadData();
     } catch (err) {
@@ -515,6 +771,7 @@ export function GetMoneyPage() {
   const hasEarned = earnedAmount > 0;
   const requestedAmount = parseAmountInput(amount || "0");
   const remaining = Math.max(0, available - requestedAmount);
+  const isAmountValid = !amountError && amount !== "" && requestedAmount > 0 && requestedAmount <= available;
 
   return <PageFrame eyebrow="Get money" title={t.dashboard.accessEarned} copy={t.dashboard.withdrawCopy}>
     {error && <div className="mb-4 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700 flex items-center gap-2"><AlertCircle size={16} />{error}</div>}
@@ -555,9 +812,33 @@ export function GetMoneyPage() {
             </div>
           </div>
           <div className="space-y-3">
-            <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder={t.withdraw.amountUpTo.replace("{amount}", formatMinorAsTenge(available))} aria-label={t.withdraw.amountToRequestAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep numbers" />
+            <div className="relative">
+              <input
+                type="number"
+                value={amount}
+                onChange={handleAmountChange}
+                placeholder={t.withdraw.amountUpTo.replace("{amount}", formatMinorAsTenge(available))}
+                aria-label={t.withdraw.amountToRequestAria}
+                aria-invalid={amountError ? "true" : "false"}
+                aria-describedby={amountError ? "amount-error" : undefined}
+                className={`w-full rounded-[10px] bg-cream px-4 py-3 text-[14px] outline-none transition-colors numbers ${
+                  amountError
+                    ? "border-red-400 focus:border-red-500"
+                    : "border-ink/[0.12] focus:border-orange-deep"
+                }`}
+              />
+              {amountError && (
+                <p id="amount-error" className="mt-1.5 text-[12px] text-red-600" role="alert">
+                  {amountError}
+                </p>
+              )}
+            </div>
             <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t.withdraw.reasonOptional} aria-label={t.withdraw.reasonAria} className="w-full rounded-[10px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep" />
-            <button onClick={handleRequest} disabled={submitting || !amount || Number(amount) <= 0 || Number(amount) > available} className="btn-primary w-full justify-center disabled:opacity-50">
+            <div className="rounded-[12px] bg-cream/50 px-3 py-2 text-[12px] text-ink-soft">
+              {t.withdraw.remaining}: <span className="font-semibold numbers">{formatMinorAsTenge(remaining)}</span>
+              <span className="ml-2 text-ink-muted">(estimate before submission)</span>
+            </div>
+            <button onClick={handleRequest} disabled={submitting || !isAmountValid} className="btn-primary w-full justify-center disabled:opacity-50">
               {submitting ? t.dashboard.submitting : t.withdraw.submit}
             </button>
           </div>

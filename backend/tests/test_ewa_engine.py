@@ -28,6 +28,7 @@ from app.models import (
     User,
     WageAccessRequest,
 )
+from app.core.auth_rate_limit import _reset_all_limiters
 from app.services.ewa_engine import (
     EligibilityReason,
     _calculate_earned,
@@ -641,6 +642,7 @@ class Phase23EwaEngineTests(unittest.IsolatedAsyncioTestCase):
 
 class Phase23EwaApiTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        _reset_all_limiters()
         import httpx
         self.temp_dir = tempfile.TemporaryDirectory()
         self._test_sessions = []
