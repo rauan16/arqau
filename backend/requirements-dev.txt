@@ -1,0 +1,24 @@
+# ARQAU backend — development / test-only dependencies.
+#
+# Install on top of requirements.txt:
+#     pip install -r requirements.txt -r requirements-dev.txt
+#
+# None of these are needed to run the application in production.
+
+# Test runner only. The suite is pure stdlib unittest
+# (unittest.IsolatedAsyncioTestCase); nothing imports pytest directly.
+pytest==9.1.1
+
+# Imported directly by backend/tests/* to drive the ASGI app in-process
+# (httpx.AsyncClient + ASGITransport). Not required at runtime.
+httpx==0.28.1
+
+# Linter. Run as `ruff check .` / `ruff format .`
+ruff==0.16.10
+
+# Test-only: used by tests/test_phase13_auth.py to encode/decode JWT
+# tokens in assertions (production uses python-jose, not PyJWT).
+PyJWT==2.10.0
+
+# Test-only: used by tests/test_phase13_auth.py to read render.yaml.
+PyYAML==6.0.2

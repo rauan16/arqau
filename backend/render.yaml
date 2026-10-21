@@ -1,21 +1,38 @@
 services:
   - type: web
     name: arqau-backend
-    env: python
+    # `runtime` must be one of the values in the Render Blueprint schema
+    # (docker|elixir|go|image|node|python|ruby|rust|static). The Python
+    # version is pinned separately via .python-version (3.12.11) and
+    # runtime.txt. The deprecated `env:` key is not part of the schema.
+    runtime: python
     plan: free
-    runtime: python-3.12
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: APP_ENV
+        value: production
+      # Secret: set manually in the Render Dashboard (Environment tab).
+      # app/config.py refuses to start the service in production when empty.
       - key: OPENAI_API_KEY
         sync: false
+      # Render generates a base64-encoded 256-bit value and keeps it
+      # ("unless a value already exists" in the Render Blueprint spec), so it
+      # survives ordinary redeploys. Replacing it invalidates every issued
+      # access token and refresh-token family.
       - key: SECRET_KEY
         generateValue: true
+      # Secret: set manually in the Render Dashboard. Must be a PostgreSQL
+      # connection string; app/config.py rejects SQLite in production.
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///./arqau.db
+        sync: false
+      # Production origins only. app/config.py rejects wildcard, non-HTTPS and
+      # localhost/loopback origins when APP_ENV=production.
       - key: CORS_ORIGINS
-        value: https://arqau.vercel.app,http://localhost:3000
+        value: https://arqau.vercel.app
+      # OpenRouter model id verified in Phase 3.4 with a real request
+      # (HTTP 200, CopilotContent schema validated).
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: deepseek/deepseek-v4.1-flash-1017
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "43200"
+        value: "30"

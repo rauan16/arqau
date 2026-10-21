@@ -2,23 +2,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.database import engine
+from app import database
 from app.models import Base
 from app.api.v1 import api_router
+from app.core.body_limit import BodyLimitMiddleware
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.environment != "production":
+        async with database.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     if not settings.openai_api_key:
         print("WARNING: OPENAI_API_KEY is not set. AI endpoints will return errors.")
     yield
 
 
 app = FastAPI(title="ARQAU API", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(BodyLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

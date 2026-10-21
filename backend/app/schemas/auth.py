@@ -28,6 +28,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user_id: str
+    refresh_token: Optional[str] = None
+    role: Optional[str] = None
 
 
 class OnboardingData(BaseModel):
@@ -37,3 +39,11 @@ class OnboardingData(BaseModel):
     financial_pressure: Optional[str] = None
     early_access_use_case: Optional[str] = None
     ai_help_preference: Optional[str] = None
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
