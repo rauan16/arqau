@@ -22,7 +22,7 @@ def upgrade() -> None:
         "ewa_policies",
         sa.Column("id", sa.String(), nullable=False),
         sa.Column("employer_id", sa.String(), nullable=False),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("max_access_percentage", sa.Integer(), nullable=False),
         sa.Column("max_withdrawals_per_period", sa.Integer(), nullable=True),
         sa.Column("minimum_tenure_days", sa.Integer(), nullable=True),
