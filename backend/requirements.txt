@@ -31,6 +31,8 @@ aiosqlite==0.22.1
 # APP_ENV=production). 0.31.0 ships cp312/cp313 wheels; the previously pinned
 # 0.29.0 has no wheels and must be compiled from source at install time.
 asyncpg==0.31.0
+# Required by SQLAlchemy asyncio for async engine/session support.
+greenlet==3.5.6
 
 # --- Auth / crypto -------------------------------------------------------
 # HS256 JWT signing and verification. The [cryptography] extra was removed:
@@ -59,6 +61,7 @@ python-dotenv==1.2.4
 # chat.completions.create(..., response_format=, max_tokens=, temperature=,
 # timeout=), the ResponseFormatJSONSchema union, and the APIConnectionError /
 # APIStatusError / APITimeoutError / RateLimitError constructors.
-# Note: openai >= 2.x depends on httpx2, not httpx. httpx is a test-only
-# dependency here and is declared in requirements-dev.txt.
+# Note: openai >= 2.x depends on httpx2, not httpx. httpx is required at runtime
+# by app/services/ai_copilot.py for provider HTTP calls.
+httpx==0.28.1
 openai==3.24.0
