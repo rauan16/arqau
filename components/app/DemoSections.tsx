@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -13,13 +13,17 @@ import {
   Filter,
   Info,
   Loader2,
+  Mail,
+  MessageCircle,
   Plus,
   RefreshCw,
   Search,
+  Send,
   TrendingUp,
   X,
 } from "lucide-react";
 import { useLocale, useTranslation } from "@/lib/language-context";
+import { api } from "@/lib/api";
 import {
   addDemoTransaction,
   commitDemoState,
@@ -37,6 +41,7 @@ import {
   demoRecommendedAmount,
   computeDemoSavings,
   computeUpcomingTotal,
+  computeUpcomingUnpaidTotal,
   upcomingBills,
   type DemoState,
   type DemoScenarioStatus,
@@ -44,6 +49,7 @@ import {
 import { buildChartData, SpendingChart, type ChartMetric, type ChartPeriod } from "@/components/app/SpendingChart";
 import { Transaction } from "@/lib/api";
 import { buildDemoDecision, buildDemoOverview, type DemoOverview as DemoOverviewData } from "@/lib/demoOverview";
+import { buildDemoFinancialContext, evaluateDemoAffordability, type DemoFinancialContext } from "@/lib/demoFinancialContext";
 import { AiGuidancePanelView } from "@/components/app/DashboardOverview";
 
 const panel = "rounded-[24px] border border-ink/[0.07] bg-white p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)] sm:p-6";
@@ -248,6 +254,7 @@ export function DemoFinancePage() {
         id: tx.id,
         user_id: "demo",
         type: tx.type,
+        amount: tx.amount,
         amount_minor: Math.round(tx.amount * 100),
         category: tx.category,
         merchant: tx.merchant,
@@ -259,14 +266,14 @@ export function DemoFinancePage() {
   );
 
   const totals = useMemo(() => computeDemoTotals(state), [state]);
-  const chartData = useMemo(() => buildChartData(transactions, metric, period, locale), [
+  const chartData = useMemo(() => buildChartData(transactions, metric, period, locale, new Date("2026-10-25T00:00:00")), [
     transactions,
     metric,
     period,
     locale,
   ]);
 
-  const fmt = (minor: number) => formatDemoAmount(minor / 100, locale);
+  const fmt = (major: number) => formatDemoAmount(major, locale);
 
   const visibleTransactions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -345,15 +352,15 @@ export function DemoFinancePage() {
         <div className="grid gap-px bg-ink/[0.07] sm:grid-cols-2 lg:grid-cols-4">
           <div className="bg-white p-5">
             <p className="text-[13px] font-semibold text-ink-soft">{e.income}</p>
-            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{fmt(totals.income * 100)}</p>
+            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{fmt(totals.income)}</p>
           </div>
           <div className="bg-white p-5">
             <p className="text-[13px] font-semibold text-ink-soft">{e.expensesLabel}</p>
-            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{fmt(totals.expense * 100)}</p>
+            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{fmt(totals.expense)}</p>
           </div>
           <div className="bg-white p-5">
             <p className="text-[13px] font-semibold text-ink-soft">{e.netBalance}</p>
-            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{totals.net >= 0 ? "+" : ""}{fmt(totals.net * 100)}</p>
+            <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">{totals.net >= 0 ? "+" : ""}{fmt(totals.net)}</p>
           </div>
           <div className="bg-white p-5">
             <p className="text-[13px] font-semibold text-ink-soft">{e.transactions}</p>
@@ -405,7 +412,7 @@ export function DemoFinancePage() {
                     <p className="text-ink-soft">{tx.date ? new Date(tx.date).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US") : ""}</p>
                   </div>
                   <span className={`font-bold numbers ${tx.type === "income" ? "text-green-600" : "text-orange-dark"}`}>
-                    {tx.type === "income" ? "+" : "-"}{fmt(tx.amount_minor)}
+                    {tx.type === "income" ? "+" : "-"}{fmt(tx.amount)}
                   </span>
                 </div>
               ))}
@@ -477,8 +484,6 @@ export function DemoHistoryPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const transactions = state.transactions;
-  const totals = computeDemoTotals(state);
-  const fmt = (value: number) => formatDemoAmount(value, locale);
 
   const visibleTransactions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -492,6 +497,23 @@ export function DemoHistoryPage() {
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions, typeFilter, query, periodFilter]);
+
+  const visibleTotals = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    for (const tx of visibleTransactions) {
+      if (tx.type === "income") income += tx.amount;
+      else expense += tx.amount;
+    }
+    return {
+      income,
+      expense,
+      net: income - expense,
+      transactionCount: visibleTransactions.length,
+    };
+  }, [visibleTransactions]);
+
+  const fmt = (value: number) => formatDemoAmount(value, locale);
 
   const monthGroups = useMemo(() => {
     const byMonth = new Map<string, { label: string; entries: typeof visibleTransactions }>();
@@ -599,25 +621,25 @@ export function DemoHistoryPage() {
               <div className="bg-white p-5">
                 <p className="text-[13px] font-semibold text-ink-soft">{h.summaryIncome}</p>
                 <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">
-                  +{fmt(totals.income)}
+                  +{fmt(visibleTotals.income)}
                 </p>
               </div>
               <div className="bg-white p-5">
                 <p className="text-[13px] font-semibold text-ink-soft">{h.summaryExpense}</p>
                 <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">
-                  {fmt(totals.expense)}
+                  {fmt(visibleTotals.expense)}
                 </p>
               </div>
               <div className="bg-white p-5">
                 <p className="text-[13px] font-semibold text-ink-soft">{h.summaryNet}</p>
                 <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">
-                  {totals.net >= 0 ? "+" : ""}{fmt(totals.net)}
+                  {visibleTotals.net >= 0 ? "+" : ""}{fmt(visibleTotals.net)}
                 </p>
               </div>
               <div className="bg-white p-5">
                 <p className="text-[13px] font-semibold text-ink-soft">{h.transactions}</p>
                 <p className="mt-3 text-[30px] font-extrabold leading-none tracking-[-0.03em] text-ink numbers">
-                  {totals.transactionCount}
+{visibleTotals.transactionCount}
                 </p>
               </div>
             </div>
@@ -724,20 +746,378 @@ export function DemoHistoryPage() {
 
 type DemoDecision = ReturnType<typeof buildDemoDecision>;
 
-export function DemoAiPage() {
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: number;
+  calculations?: {
+    amount?: number;
+    remainingAvailable?: number;
+    bufferAfterBills?: number;
+    requestable?: boolean;
+    status?: string;
+    shareOfEarned?: number;
+    reason?: string;
+    availableAmount?: number;
+    earnedAmount?: number;
+    upcomingBillsTotal?: number;
+    upcomingBillsUnpaidTotal?: number;
+    reserveTarget?: number;
+    reserveSaved?: number;
+    daysToPayday?: number;
+    paydayDate?: string;
+    currency?: string;
+  };
+  error?: string;
+  fallbackUsed?: boolean;
+  provider?: string | null;
+  fallbackReason?: string | null;
+};
+
+function DemoAiChat() {
   const { t } = useTranslation();
   const locale = useLocale();
-  const o = t.overview;
   const ai = t.ai;
+  const d = t.demo;
   const state = useDemoState();
 
-  const overview = useMemo(() => buildDemoOverview(state), [state]);
-  const [amount, setAmount] = useState(() =>
-    Math.min(state.available, Math.max(0, overview.comfortableWithdrawal)),
-  );
-  const [decision, setDecision] = useState<DemoDecision | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
-  const fmt = (value: number) => formatDemoAmount(value, locale);
+  const fmt = (value: number | null | undefined): string => {
+    if (value === null || value === undefined) return "—";
+    return formatDemoAmount(value, locale);
+  };
+
+  const suggestedQuestions: Array<{ key: string; text: string }> = [
+    { key: "flight", text: locale === "ru" ? "Могу ли я купить авиабилет Алматы — Астана за 45 000 ₸?" : "Can I buy a flight Almaty — Astana for 45,000 ₸?" },
+    { key: "leftover", text: locale === "ru" ? "Сколько денег у меня останется после этой покупки?" : "How much money will I have left after this purchase?" },
+    { key: "bills", text: locale === "ru" ? "Какие обязательные платежи мне предстоят?" : "What upcoming mandatory payments do I have?" },
+    { key: "reserve", text: locale === "ru" ? "Сколько я могу потратить, чтобы сохранить резерв?" : "How much can I spend while keeping my reserve?" },
+    { key: "wait", text: locale === "ru" ? "Что лучше: купить сейчас или дождаться зарплаты?" : "Should I buy now or wait for payday?" },
+  ];
+
+  const context = buildDemoFinancialContext(state, locale);
+
+  const messageIdRef = useRef(0);
+
+  const addMessage = (message: Omit<ChatMessage, "id" | "createdAt">) => {
+    messageIdRef.current += 1;
+    const id = `msg-${messageIdRef.current}`;
+    setMessages((prev) => [...prev, { ...message, id, createdAt: messageIdRef.current }]);
+  };
+
+  const clearError = () => setError(null);
+
+  const handleSuggestedQuestion = (text: string) => {
+    setInputValue(text);
+  };
+
+const renderMarkdown = (text: string): React.ReactNode => {
+  if (!text.trim()) return null;
+
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  let listKeyCounter = 0;
+
+  const renderBold = (cell: string) => {
+    return cell.replace(/\*\*(.+?)\*\*/g, <span key={Math.random()} className="font-bold">{$1}</span>);
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Skip empty lines between blocks (handled by adding <p></p> later)
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+// Tables: detect by starting with |
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith("|")) {
+      const tableRows: string[][] = [];
+      // Collect consecutive table rows
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const rawCells = lines[i].split("|").map((cell) => cell.trim());
+        const cells: string[] = [];
+        let maxLen = rawCells.length;
+        for (let j = 0; j < maxLen; j++) {
+          cells[j] = rawCells[j] !== undefined ? rawCells[j] : "";
+        }
+        tableRows.push(cells);
+        i++;
+      }
+      if (tableRows.length > 0) {
+        // First row is header, second row is separator (optional)
+        const headers = tableRows[0];
+        // Data rows: take everything after the header row and optional separator row
+        const isSeparator = (c: string) => /^:?-{3,}:?$/.test(c);
+        const hasSeparator = tableRows.length > 1 && tableRows[1].every((c) => isSeparator(c));
+        const dataRows = hasSeparator ? tableRows.slice(2) : tableRows.slice(1);
+
+        const colCount = Math.max(...tableRows.map((r) => r.length), 1);
+
+        const padRow = (row: string[]): string[] => {
+          const padded: string[] = [];
+          for (let j = 0; j < colCount; j++) {
+            padded[j] = row[j] || "";
+          }
+          return padded;
+        };
+
+        const tableElement: React.ReactNode = (
+          <div className="relative overflow-x-auto rounded-[12px] border border-ink/[0.08] bg-white p-4 mt-3" style={{ marginBottom: 12 }}>
+<table className="w-full text-sm text-ink">
+              <thead>
+                <tr>
+                  {headers.map((header, idx) => (
+                    <th key={idx} className="p-2 text-left text-[11px] font-medium text-ink-soft">
+                      {renderBold(header)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                  {dataRows.map((row, rowIdx) => (
+                    <tr key={rowIdx}>
+                      {padRow(row).map((cell, cellIdx) => (
+                        <td key={cellIdx + rowIdx * 100} className="p-2 align-middle text-[12px]">
+                          {renderBold(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        elements.push(tableElement);
+        continue; // skip the i++ at bottom
+      }
+    }
+
+    // Headers: # ## ### etc.
+
+    // Headers: # ## ### etc.
+    const headerMatch = line.match(/^(\#{1,6})\s(.+)/);
+    if (headerMatch) {
+      const level = headerMatch[1].length;
+      const text = headerMatch[2];
+      // Map to ARQAU compatible heading sizes
+      const hClass = level === 1 ? "text-[32px] font-extrabold leading-[1] tracking-[-0.04em] sm:text-[48px]" :
+                     level === 2 ? "text-[24px] font-bold leading-[1.1] sm:text-[36px]" :
+                     level === 3 ? "text-[20px] font-semibold leading-relaxed" :
+                                  "text-[16px] font-medium";
+      elements.push(<p key={i} className={hClass}>{text}</p>);
+      i++;
+      continue;
+    }
+
+    // Unordered lists: start with "- "
+    if (line.startsWith("- ")) {
+      const listItems: React.ReactNode[] = [];
+      // Collect consecutive list items
+      let listCount = 0;
+      while (i < lines.length && lines[i].startsWith("- ")) {
+        const itemText = lines[i].substring(2).trim();
+        listCount++;
+        listItems.push(
+          <li key={itemText.replace(/\s+/g, "-").replace(/[^\w-]/g, "") + listCount} className="text-[13px] leading-relaxed text-ink mb-1">
+            {itemText}
+          </li>
+        );
+        i++;
+      }
+      if (listItems.length > 0) {
+        elements.push(
+          <ul key={`md-list-${listKeyCounter}`} className="list-disc list-inside space-y-1.5 text-[13px] leading-relaxed text-ink">{listItems}</ul>
+        );
+        listKeyCounter++;
+        continue;
+      }
+    }
+
+    // Ordered lists: start with "1. " or "2. " etc.
+    const orderedMatch = line.match(/^(\d+)\.\s(.+)/);
+    if (orderedMatch) {
+      const listItems: React.ReactNode[] = [];
+      let listCount = 0;
+      // Collect consecutive ordered list items
+      const startNum = parseInt(orderedMatch[1], 10);
+      let currentNum = startNum;
+      while (i < lines.length) {
+        const orderedLineMatch = lines[i].match(/^(\d+)\.\s(.+)/);
+        if (!orderedLineMatch) break;
+        const itemText = orderedLineMatch[2].trim();
+        currentNum++;
+        // Use the item text as part of the key for stability
+        listItems.push(
+          <li key={itemText.replace(/\s+/g, "-").replace(/[^\w-]/g, "") + currentNum} className="text-[13px] leading-relaxed text-ink mb-1">
+            {itemText}
+          </li>
+        );
+        i++;
+      }
+      if (listItems.length > 0) {
+        elements.push(
+          <ol key={`md-list-${listKeyCounter}`} className="list-decimal list-inside space-y-1.5 text-[13px] leading-relaxed text-ink">{listItems}</ol>
+        );
+        listKeyCounter++;
+        continue;
+      }
+    }
+
+    // Default: paragraph
+    elements.push(<p key={i} className="text-[13px] leading-relaxed text-ink">{line}</p>);
+    i++;
+  }
+
+  // Wrap in a div if we have elements
+  if (elements.length === 0) return null;
+  if (elements.length === 1) return elements[0];
+  return <div className="space-y-4">{elements}</div>;
+};
+
+  const handleSend = async (e: React.FormEvent, overrideText?: string) => {
+    e.preventDefault();
+    const text = (overrideText ?? inputValue).trim();
+    if (!text || isSending) return;
+
+    setError(null);
+    const userMessage: Omit<ChatMessage, "id" | "createdAt"> = {
+      role: "user",
+      content: text,
+    };
+    addMessage(userMessage);
+    setInputValue("");
+    setIsSending(true);
+
+    try {
+      const response = await api.ai.demo.chat(text, conversationId ?? undefined);
+      if (response.conversation_id && !conversationId) {
+        setConversationId(response.conversation_id);
+      }
+
+      const calc = response.withdrawal_analysis
+        ? {
+            amount: response.withdrawal_analysis.requested_amount_minor / 100,
+            remainingAvailable:
+              response.withdrawal_analysis.impact.remaining_available_amount_minor != null
+                ? response.withdrawal_analysis.impact.remaining_available_amount_minor / 100
+                : undefined,
+            bufferAfterBills: undefined,
+            requestable: response.withdrawal_analysis.requestability.requestable,
+            status: undefined,
+            shareOfEarned:
+              response.withdrawal_analysis.impact.requested_share_of_earned_bps != null
+                ? response.withdrawal_analysis.impact.requested_share_of_earned_bps / 10000
+                : undefined,
+            reason:
+              response.withdrawal_analysis.requestability.blocking_reasons.length > 0
+                ? response.withdrawal_analysis.requestability.blocking_reasons.join("; ")
+                : undefined,
+            availableAmount: context.availableAmount,
+            earnedAmount: context.earnedAmount,
+            upcomingBillsTotal: context.upcomingBillsTotal,
+            upcomingBillsUnpaidTotal: context.upcomingBillsUnpaidTotal,
+            reserveTarget: context.reserveTarget,
+            reserveSaved: context.reserveSaved,
+            daysToPayday: context.daysToPayday,
+            paydayDate: context.paydayDate,
+            currency: context.currency,
+          }
+        : undefined;
+
+      addMessage({
+        role: "assistant",
+        content: response.response,
+        calculations: calc,
+        fallbackUsed: response.ai_metadata.fallback_used,
+        provider: response.ai_metadata.provider,
+fallbackReason: response.ai_metadata.fallback_reason,
+});
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : locale === "ru" ? "Ошибка отправки вопроса." : "Failed to send question.";
+      setError(message);
+      addMessage({
+        role: "assistant",
+        content: message,
+        error: message,
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleRetry = (index: number) => {
+    const message = messages[index];
+    if (!message || message.role !== "assistant" || !message.error) return;
+    setMessages((prev) => prev.filter((_, i) => i !== index));
+    setIsSending(true);
+    setError(null);
+    handleSend(new Event("submit") as unknown as React.FormEvent, message.content);
+  };
+
+  const renderFinancialCard = (calc: ChatMessage["calculations"]) => {
+    if (!calc) return null;
+    const statusColor =
+      calc.status === "comfortable"
+        ? "bg-green-100 text-green-700"
+        : calc.status === "caution"
+          ? "bg-orange-soft text-orange-dark"
+          : "bg-red-100 text-red-600";
+
+    return (
+      <section className={panel} key="financial-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.impactTitle}</h2>
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold ${statusColor}`}>
+            {calc.status === "comfortable" ? ai.yes : calc.status === "caution" ? ai.no : ai.no}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
+            <p className="text-[12px] font-semibold text-ink-soft">{ai.availableAmount}</p>
+            <p className="mt-1 font-bold numbers text-ink">{calc.availableAmount != null ? fmt(calc.availableAmount) : "—"}</p>
+          </div>
+          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
+            <p className="text-[12px] font-semibold text-ink-soft">{ai.impactRemainingAvailable}</p>
+            <p className="mt-1 font-bold numbers text-ink">{calc.remainingAvailable != null ? fmt(calc.remainingAvailable) : "—"}</p>
+          </div>
+          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
+            <p className="text-[12px] font-semibold text-ink-soft">{t.demo.upcomingBills}</p>
+            <p className="mt-1 font-bold numbers text-ink">{calc.upcomingBillsTotal != null ? fmt(calc.upcomingBillsTotal) : "—"}</p>
+          </div>
+          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
+            <p className="text-[12px] font-semibold text-ink-soft">{ai.impactShareOfEarned}</p>
+            <p className="mt-1 font-bold numbers text-ink">
+              {calc.shareOfEarned != null ? `${(calc.shareOfEarned * 100).toFixed(0)}%` : "—"}
+            </p>
+          </div>
+        </div>
+        {calc.requestable !== undefined && (
+          <div className="mt-4 rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
+            <p className={`text-[13px] font-bold ${calc.requestable ? "text-green-600" : "text-red-600"}`}>
+              {calc.requestable ? ai.impactRequestable : ai.impactNotRequestable}
+            </p>
+            {calc.reason && <p className="mt-1 text-[12px] text-ink-soft">{calc.reason}</p>}
+          </div>
+        )}
+        <p className="mt-4 text-[12px] leading-relaxed text-ink-soft">
+          {locale === "ru"
+            ? `До зарплаты: ${calc.daysToPayday ?? context.daysToPayday} дней. ${d.periodSurplus}: ${fmt(calc.reserveSaved ?? context.reserveSaved)} из ${fmt(calc.reserveTarget ?? context.reserveTarget)}.`
+            : `Days to payday: ${calc.daysToPayday ?? context.daysToPayday}. ${d.periodSurplus}: ${fmt(calc.reserveSaved ?? context.reserveSaved)} of ${fmt(calc.reserveTarget ?? context.reserveTarget)}.`}
+        </p>
+      </section>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -749,49 +1129,150 @@ export function DemoAiPage() {
             {ai.personalAdviceBody}
           </p>
         </div>
+        <Link
+          href="/demo/what-if"
+          className="inline-flex items-center gap-1.5 rounded-full border border-orange/40 px-4 py-2 text-[12px] font-bold text-orange-dark transition-colors hover:border-orange hover:bg-white/50"
+        >
+          {ai.whatIfCta} <ArrowRight size={13} />
+        </Link>
       </div>
 
-      <AiGuidancePanelView
-        availableMinor={state.available * 100}
-        amountMinor={amount * 100}
-        onAmountChange={(minor) => setAmount(Math.round(minor / 100))}
-        decision={decision}
-        decisionError={null}
-        analyzing={false}
-        onAnalyze={() => setDecision(buildDemoDecision(state, amount, locale))}
-        contextNote={
-          <>
-            {t.demo.planUpcomingBills}: {fmt(overview.upcomingBillsTotal)} - {t.demo.planReserveTarget}:{" "}
-            {fmt(overview.reserveTarget)}
-          </>
-        }
-        whyHref="/demo/ai"
-        getMoneyHref="/demo/get-money"
-        whatIfHref="/demo/what-if"
-      />
+      {error && (
+        <div className="flex items-center gap-2 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          <AlertCircle size={16} /> {error}
+          <button
+            type="button"
+            onClick={clearError}
+            className="ml-auto rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-bold text-ink-soft hover:border-orange/30"
+          >
+            {ai.retry}
+          </button>
+        </div>
+      )}
+
+      {messages.length === 0 && (
+        <section className={panel}>
+          <div className="space-y-4">
+            <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.emptyChatTitle}</h2>
+            <p className="text-[14px] leading-relaxed text-ink-soft">{ai.emptyChatBody}</p>
+            <div className="mt-5 space-y-2">
+              <p className="text-[12px] font-semibold text-ink-soft">{ai.suggestedQuestions}</p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedQuestions.map((q) => (
+                  <button
+                    key={q.key}
+                    type="button"
+                    onClick={() => handleSuggestedQuestion(q.text)}
+                    className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
+                  >
+                    {q.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className={panel}>
-        <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.keyFactsTitle}</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
-            <p className="text-[12px] font-semibold text-ink-soft">{ai.factAvailable}</p>
-            <p className="mt-1 font-bold numbers text-ink">{fmt(state.available)}</p>
-          </div>
-          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
-            <p className="text-[12px] font-semibold text-ink-soft">{ai.factMaxRequestable}</p>
-            <p className="mt-1 font-bold numbers text-ink">{fmt(state.available)}</p>
-          </div>
-          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
-            <p className="text-[12px] font-semibold text-ink-soft">{t.demo.upcomingBills}</p>
-            <p className="mt-1 font-bold numbers text-ink">{fmt(overview.upcomingBillsTotal)}</p>
-          </div>
+        <div className="flex flex-col gap-3 max-w-3xl">
+          {messages.map((msg, index) => {
+            const isUser = msg.role === "user";
+            return (
+              <div
+                key={msg.id}
+                className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} animate-[fade-in_0.2s_ease-out]`}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
+                  {isUser ? (
+                    <span className="bg-orange text-[11px] font-bold text-cream">A</span>
+                  ) : (
+                    <span className="bg-ink text-[11px] font-bold text-cream">AR</span>
+                  )}
+                </div>
+                <div
+                  className={`rounded-[16px] px-4 py-3 text-[13px] leading-relaxed min-w-0 ${
+                    isUser
+                      ? "bg-orange text-cream"
+                      : msg.error
+                        ? "bg-red-50 text-red-900 border border-red-200"
+                        : "bg-cream/40 text-ink"
+                  }`}
+                >
+                  {renderMarkdown(msg.content)}
+                  {msg.calculations && renderFinancialCard(msg.calculations)}
+                  {msg.fallbackUsed && (
+                    <p className="mt-2 text-[11px] text-ink-soft/70">
+                      {locale === "ru" ? "Использован детерминированный расчёт." : "Deterministic calculation used."}
+                    </p>
+                  )}
+                  {process.env.NODE_ENV === "development" && !isUser && (
+                    <div className="mt-2 p-2 bg-ink/5 rounded-[8px] text-[10px] font-mono text-ink-soft">
+                      <div>fallbackUsed: {String(msg.fallbackUsed)}</div>
+                      <div>fallbackReason: {msg.fallbackReason ?? "null"}</div>
+                      <div>provider: {msg.provider ?? "null"}</div>
+                    </div>
+                  )}
+                  {msg.error && !msg.fallbackUsed && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetry(index)}
+                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-orange hover:underline"
+                    >
+                      <RefreshCw size={12} /> {ai.retry}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <p className="mt-4 text-[13px] leading-relaxed text-ink-soft">
-          {ai.educativeNote}
-        </p>
       </section>
+
+      <form onSubmit={handleSend} className={panel}>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={ai.askPlaceholder}
+            aria-label={ai.askAria}
+            disabled={isSending}
+            className="flex-1 rounded-[12px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep disabled:opacity-60"
+          />
+          <button
+            type="submit"
+            disabled={!inputValue.trim() || isSending}
+            className="rounded-[12px] px-4 py-3 text-[14px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              backgroundColor: isSending || !inputValue.trim() ? "rgba(22,20,18,0.05)" : "#f26722",
+              color: isSending || !inputValue.trim() ? "rgba(22,20,18,0.3)" : "#ffffff",
+            }}
+          >
+            {isSending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Send size={16} />
+            )}
+          </button>
+        </div>
+        {isSending && (
+          <p className="mt-2 text-[12px] text-ink-soft">{ai.thinking}</p>
+        )}
+      </form>
+
+      <Link
+        href="/demo/get-money"
+        className="inline-flex items-center gap-1.5 rounded-full border border-orange/40 px-4 py-2 text-[12px] font-bold text-orange-dark transition-colors hover:border-orange hover:bg-white/50 mt-4"
+      >
+        {ai.getAmount.replace("{amount}", fmt(state.available))} <ArrowRight size={13} />
+      </Link>
     </div>
   );
+}
+
+export function DemoAiPage() {
+  return <DemoAiChat />;
 }
 
 export function DemoWhatIfPage() {
@@ -801,7 +1282,9 @@ export function DemoWhatIfPage() {
   const d = t.demo;
   const state = useDemoState();
 
-  const [amount, setAmount] = useState(() => Math.min(state.available, demoRecommendedAmount(state)));
+  const upcomingUnpaidTotal = computeUpcomingUnpaidTotal();
+  const comfortableAmount = Math.max(0, state.available - upcomingUnpaidTotal - state.reserveTarget);
+  const [amount, setAmount] = useState(() => comfortableAmount);
   const scenario = evaluateDemoScenario(state, amount);
   const savings = computeDemoSavings(state);
   const upcomingTotal = computeUpcomingTotal();
@@ -813,7 +1296,10 @@ export function DemoWhatIfPage() {
   const statusTone =
     scenario.status === "comfortable" ? "bg-green-100 text-green-700" : scenario.status === "caution" ? "bg-orange-soft text-orange-dark" : "bg-red-100 text-red-600";
 
-  const presets = [30000, 50000, 60000, 100000].filter((value) => value <= state.available);
+  const basePresets = [30000, 50000, 60000, 100000].filter((value) => value <= state.available);
+  const presets = comfortableAmount > 0 && !basePresets.includes(comfortableAmount)
+    ? [comfortableAmount, ...basePresets]
+    : basePresets;
 
   return (
     <div className="space-y-6">
@@ -836,7 +1322,7 @@ export function DemoWhatIfPage() {
             min="0"
             max={state.available}
             value={amount}
-            step={5000}
+            step={100}
             onChange={(event) => setAmount(Number(event.target.value))}
             aria-label={w.sliderAria}
             className="w-full h-2 bg-ink/10 rounded-lg appearance-none cursor-pointer accent-orange"
@@ -850,7 +1336,7 @@ export function DemoWhatIfPage() {
 
       <section className={panel}>
         <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{w.selectedTitle}</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
             <p className="text-[12px] font-semibold text-ink-soft">{w.availableNow}</p>
             <p className="mt-1 font-bold numbers text-ink">{fmt(state.available)}</p>
@@ -865,10 +1351,6 @@ export function DemoWhatIfPage() {
               {(scenario.shareOfEarned * 100).toFixed(0)}%
             </p>
           </div>
-          <div className="rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
-            <p className="text-[12px] font-semibold text-ink-soft">{w.slotsLeft}</p>
-            <p className="mt-1 font-bold numbers text-ink">?</p>
-          </div>
         </div>
 
         <div className="mt-6 rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
@@ -879,6 +1361,12 @@ export function DemoWhatIfPage() {
             <span className="text-[12px] font-bold text-ink">{fmt(scenario.bufferAfter)}</span>
           </div>
           <p className="text-[13px] leading-relaxed text-ink-soft">{w.scenarioNote}</p>
+          {scenario.status === "caution" && (
+            <p className="mt-2 text-[12px] text-orange-dark">{d.cautionText}</p>
+          )}
+          {scenario.status === "high-risk" && (
+            <p className="mt-2 text-[12px] text-red-600">{d.highRiskText}</p>
+          )}
         </div>
       </section>
 
@@ -941,10 +1429,14 @@ export function DemoGetMoneyPage() {
   const [flowStep, setFlowStep] = useState<string>("amount");
   const scenario = evaluateDemoScenario(state, amount);
   const savings = computeDemoSavings(state);
-  const upcomingTotal = computeUpcomingTotal();
+  const upcomingUnpaidTotal = computeUpcomingUnpaidTotal();
   const fmt = (value: number) => formatDemoAmount(value, locale);
 
-  const presets = [10000, 30000, 50000, 60000, 100000].filter((value) => value <= state.available);
+  const basePresets = [10000, 30000, 50000, 60000, 100000].filter((value) => value <= state.available);
+  const recommendedAmount = demoRecommendedAmount(state);
+  const presets = recommendedAmount > 0 && recommendedAmount <= state.available && !basePresets.includes(recommendedAmount)
+    ? [recommendedAmount, ...basePresets]
+    : basePresets;
   const requestable = amount > 0 && amount <= state.available && scenario.bufferAfter >= 0;
 
   return (
@@ -1024,7 +1516,7 @@ export function DemoGetMoneyPage() {
             <div className="mt-4 rounded-[12px] border border-ink/[0.08] bg-white/50 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-ink-soft">{d.upcomingBills}</span>
-                <span className="text-[12px] text-ink-soft">-{fmt(upcomingTotal)}</span>
+                <span className="text-[12px] text-ink-soft">-{fmt(upcomingUnpaidTotal)}</span>
               </div>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[12px] font-semibold text-ink-soft">{d.reserve}</span>

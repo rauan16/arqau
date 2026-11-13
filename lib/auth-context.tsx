@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from "react";
 import { api, User, setToken, clearToken, getToken } from "./api";
 
 type AuthState = "loading" | "authenticated" | "unauthenticated";
@@ -21,25 +21,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>("loading");
   const [user, setUser] = useState<User | null>(null);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const refreshUser = useCallback(async () => {
     if (!getToken()) {
-      setState("unauthenticated");
-      setUser(null);
-      setOnboardingComplete(false);
+      if (mountedRef.current) {
+        setState("unauthenticated");
+        setUser(null);
+        setOnboardingComplete(false);
+      }
       return;
     }
     try {
       const u = await api.auth.me();
+      if (!mountedRef.current) return;
       setUser(u);
       setState("authenticated");
       try {
         const ob = await api.onboarding.get();
-        setOnboardingComplete(!!ob.pay_frequency);
+        if (!mountedRef.current) return;
+        // Onboarding is complete only when all REQUIRED fields are present.
+        // Required: pay_frequency, monthly_income_range, payday_range.
+        // Optional: financial_pressure, early_access_use_case, ai_help_preference.
+        const requiredComplete =
+          !!ob.pay_frequency &&
+          !!ob.monthly_income_range &&
+          !!ob.payday_range;
+        setOnboardingComplete(requiredComplete);
       } catch {
-        setOnboardingComplete(false);
+        if (mountedRef.current) setOnboardingComplete(false);
       }
     } catch {
+      if (!mountedRef.current) return;
       clearToken();
       setUser(null);
       setOnboardingComplete(false);

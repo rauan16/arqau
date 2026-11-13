@@ -24,6 +24,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+from fastapi import HTTPException, Request, status
+
+from app.core.auth_rate_limit import get_client_ip
+
 # Configuration — editable via env/config later if needed
 PROVIDER_CALLS_PER_WINDOW = 20
 PROVIDER_WINDOW_SECONDS = 60 * 60  # 60 minutes
@@ -149,5 +153,58 @@ async def enforce_total_ceiling(user_id: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many requests",
+            headers={"Retry-After": str(int(retry_after) + 1)},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Demo AI public endpoint rate limiting (Phase 3.5.2C).
+#
+# Public POST /demo/ai/chat has no authenticated user, so it is keyed by client
+# IP instead of user identity. This is a single-instance, in-process limiter:
+# counters reset on restart and are not shared across workers/instances. When
+# TRUSTED_PROXY_COUNT is 0 (the safe default), every client behind the same
+# reverse proxy shares one bucket — the IP cannot be spoofed, but per-client
+# granularity is lost in multi-proxy deployments. A Redis-backed distributed
+# limiter is required for true per-client-IP limiting at scale.
+#
+# IP extraction reuses the safe logic from app.core.auth_rate_limit:
+#   - TRUSTED_PROXY_COUNT == 0: request.client.host (immediate peer, not
+#     spoofable by the client).
+#   - TRUSTED_PROXY_COUNT > 0: X-Forwarded-For at the trusted boundary, only
+#     when the immediate peer is a verified trusted proxy operated by us.
+# Never trust X-Forwarded-For from untrusted clients.
+# ---------------------------------------------------------------------------
+
+DEMO_AI_MAX_REQUESTS = 30
+DEMO_AI_WINDOW_SECONDS = 60  # 1 minute
+
+_DEMO_AI_LIMITER = RateLimiter(DEMO_AI_MAX_REQUESTS, DEMO_AI_WINDOW_SECONDS)
+
+
+def get_demo_ai_limiter() -> RateLimiter:
+    """IP-based rate limiter for public /demo/ai/chat (30 requests/min per IP)."""
+    return _DEMO_AI_LIMITER
+
+
+def reset_demo_ai_limiter() -> None:
+    """Reset the demo AI rate limiter. Test helper only."""
+    _DEMO_AI_LIMITER.reset()
+
+
+async def enforce_demo_ai_rate_limit(request: Request) -> None:
+    """Enforce IP-based rate limit for the public demo AI chat.
+
+    Raises HTTP 429 with Retry-After when the per-IP ceiling is exceeded.
+    Checked before any provider call, so the LLM budget is never consumed by
+    a rate-limited request.
+    """
+    client_ip = await get_client_ip(request)
+    limiter = get_demo_ai_limiter()
+    if not await limiter.try_acquire(client_ip):
+        retry_after = limiter.retry_after_seconds(client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many demo AI requests. Please try again later.",
             headers={"Retry-After": str(int(retry_after) + 1)},
         )

@@ -1,13 +1,13 @@
 import Navbar from "@/components/landing/Navbar";
 import Hero from "@/components/landing/Hero";
-import DifferenceSection from "@/components/landing/DifferenceSection";
+import AboutSection from "@/components/landing/AboutSection";
+import ProblemSection from "@/components/landing/ProblemSection";
 import HowItWorks from "@/components/landing/HowItWorks";
-import ProductShowcase from "@/components/landing/ProductShowcase";
 import RecommendationSection from "@/components/landing/RecommendationSection";
-import WhatIfSimulator from "@/components/landing/WhatIfSimulator";
-import AIAssistant from "@/components/landing/AIAssistant";
 import EmployerSection from "@/components/landing/EmployerSection";
-import BrandStatement from "@/components/landing/BrandStatement";
+import ProductShowcase from "@/components/landing/ProductShowcase";
+import PricingSection from "@/components/landing/PricingSection";
+import FAQSection from "@/components/landing/FAQSection";
 import FinalCTA from "@/components/landing/FinalCTA";
 import Footer from "@/components/landing/Footer";
 
@@ -17,14 +17,14 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
-        <DifferenceSection />
+        <AboutSection />
+        <ProblemSection />
         <HowItWorks />
-        <ProductShowcase />
         <RecommendationSection />
-        <WhatIfSimulator />
-        <AIAssistant />
         <EmployerSection />
-        <BrandStatement />
+        <ProductShowcase />
+        <PricingSection />
+        <FAQSection />
         <FinalCTA />
       </main>
       <Footer />

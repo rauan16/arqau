@@ -63,6 +63,9 @@ export default function WhatIfSimulator() {
           <div className="flex items-baseline justify-between mb-2">
             <p className="text-[13px] text-ink-soft">{t.landing.whatIfWithdrawalAmount}</p>
             <p className="text-[13px] text-ink-soft">{t.whatIf.available}: {formatTenge(scenario.available)}</p>
+          <p className="text-[11px] text-ink-soft/60">
+            This is an illustrative demo value, not an amount eligible for actual withdrawal. No EWA policy is configured for this employer.
+          </p>
           </div>
 
           <motion.p

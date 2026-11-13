@@ -1,3 +1,5 @@
+import { toReadableError } from "./errorMessages";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const BFF_BASE = "/api";
 
@@ -19,6 +21,109 @@ export interface OnboardingData {
   ai_help_preference?: string;
 }
 
+export interface EmployerCreate {
+  legal_name: string;
+  display_name?: string;
+  registration_number?: string;
+  country?: string;
+}
+
+export interface EmployerRead {
+  id: string;
+  legal_name: string;
+  display_name?: string | null;
+  registration_number?: string | null;
+  country?: string | null;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface EmployeeRead {
+  id: string;
+  user_id: string;
+  external_employee_id?: string | null;
+  display_name?: string | null;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface EmploymentRead {
+  id: string;
+  employee_id: string;
+  employer_id: string;
+  employment_type?: string | null;
+  status: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  eligible_from?: string | null;
+  eligible_to?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface SalaryProfileRead {
+  id: string;
+  employment_id: string;
+  currency: string;
+  monthly_salary_amount_minor: number;
+  pay_schedule: string;
+  payday_day?: number | null;
+  effective_from: string;
+  effective_to?: string | null;
+  status: string;
+  source: string;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface EwaPolicyRead {
+  id: string;
+  employer_id: string;
+  enabled: boolean;
+  max_access_percentage: number;
+  max_withdrawals_per_period?: number | null;
+  minimum_tenure_days?: number | null;
+  minimum_remaining_salary_minor?: number | null;
+  minimum_withdrawal_minor?: number | null;
+  maximum_withdrawal_minor?: number | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export type WageAccessRequestStatus =
+  | "pending"
+  | "approved"
+  | "paid"
+  | "rejected"
+  | "cancelled"
+  // Legacy rows may still carry "completed"; the backend lifecycle uses
+  // pending → approved → paid (plus rejected / cancelled).
+  | "completed";
+
+/**
+ * Shape of `GET /ewa/requests` (backend `schemas.ewa.WageAccessRequestResponse`).
+ * Field-for-field match, including the lifecycle timestamps and the optional
+ * pay-period binding, so the History page can report real statuses and dates.
+ */
+export interface WageAccessRequest {
+  id: string;
+  user_id: string;
+  amount_minor: number;
+  status: WageAccessRequestStatus;
+  reason?: string | null;
+  pay_period_start?: string | null;
+  pay_period_end?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  cancelled_at?: string | null;
+  paid_at?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
 export interface Transaction {
   id: string;
   user_id: string;
@@ -36,6 +141,123 @@ export interface FinanceSummary {
   total_expense_minor: number;
   net_balance_minor: number;
   transaction_count: number;
+}
+
+export interface FinancialContextEmployment {
+  employment_id?: string | null;
+  employer_id?: string | null;
+  employer_name?: string | null;
+  employment_status?: string | null;
+}
+
+export interface FinancialContextIncome {
+  salary_amount_minor?: number | null;
+  currency?: string | null;
+  pay_period_start?: string | null;
+  pay_period_end?: string | null;
+}
+
+export interface FinancialContextEwa {
+  earned_amount_minor: number;
+  policy_limit_minor: number;
+  reserved_amount_minor: number;
+  paid_amount_minor: number;
+  available_amount_minor: number;
+  max_requestable_amount_minor: number;
+  pay_period_start?: string | null;
+  pay_period_end?: string | null;
+  calculation_date?: string | null;
+  salary_amount_minor?: number | null;
+  eligible: boolean;
+  eligibility_reasons: string[];
+  minimum_withdrawal_minor?: number | null;
+  maximum_withdrawal_minor?: number | null;
+  can_request_withdrawal: boolean;
+  max_withdrawals_per_period?: number | null;
+  withdrawals_this_period: number;
+}
+
+export interface FinancialContextRecentWithdrawal {
+  id: string;
+  amount_minor: number;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface FinancialContextWithdrawalHistory {
+  available: boolean;
+  total_requests: number;
+  pending_count: number;
+  approved_count: number;
+  paid_count: number;
+  rejected_count: number;
+  cancelled_count: number;
+  requested_amount_minor: number;
+  paid_amount_minor: number;
+  recent_requests: FinancialContextRecentWithdrawal[];
+}
+
+export interface FinancialContextCategory {
+  category: string;
+  amount_minor: number;
+  transaction_count: number;
+}
+
+export interface FinancialContextSpending {
+  available: boolean;
+  total_spending_minor?: number | null;
+  transaction_count: number;
+  essential_spending_minor?: number | null;
+  discretionary_spending_minor?: number | null;
+  category_breakdown: FinancialContextCategory[];
+}
+
+export interface FinancialContextBudget {
+  available: boolean;
+  total_budget_minor?: number | null;
+  spent_minor?: number | null;
+  remaining_minor?: number | null;
+}
+
+export interface FinancialContextGoal {
+  id: string;
+  title: string;
+  target_minor: number;
+  current_minor: number;
+  status: string;
+  progress_pct: number;
+}
+
+export interface FinancialContextGoals {
+  available: boolean;
+  active_goals_count?: number | null;
+  total_target_minor?: number | null;
+  total_saved_minor?: number | null;
+  goals: FinancialContextGoal[];
+}
+
+export interface FinancialContextDataQuality {
+  has_salary_profile: boolean;
+  has_ewa_policy: boolean;
+  has_transactions: boolean;
+  has_budget: boolean;
+  has_goals: boolean;
+  missing_data: string[];
+}
+
+export interface FinancialContext {
+  user_id: string;
+  generated_at?: string | null;
+  calculation_date?: string | null;
+  employment: FinancialContextEmployment;
+  income: FinancialContextIncome;
+  ewa: FinancialContextEwa;
+  withdrawal_history: FinancialContextWithdrawalHistory;
+  spending: FinancialContextSpending;
+  budget: FinancialContextBudget;
+  goals: FinancialContextGoals;
+  data_quality: FinancialContextDataQuality;
 }
 
 export interface EarnedWages {
@@ -68,14 +290,11 @@ export interface EWAResultResponse {
   max_requestable_amount_minor: number;
 }
 
-export interface WageAccessRequest {
-  id: string;
-  user_id: string;
-  amount_minor: number;
-  status: "pending" | "approved" | "rejected" | "completed";
-  reason?: string;
-  created_at: string;
-}
+/**
+ * Employer-scoped listing (`GET /ewa/employers/{id}/requests`) returns the same
+ * schema as the employee-facing `/ewa/requests`.
+ */
+export type WageAccessRequestRead = WageAccessRequest;
 
 export interface Budget {
   id: string;
@@ -141,21 +360,72 @@ export interface StructuredDecision {
   ai_metadata: AIMetadata;
 }
 
+/**
+ * Authoritative, read-only withdrawal analysis (Phase 3.2).
+ *
+ * Field-for-field match of the backend `financial_context.WithdrawalAnalysis`
+ * schema. There is deliberately NO risk level, recommendation, reserve status
+ * or covered-expenses flag: those encoded an AI-side financial calculation the
+ * backend architecture prohibits. Every value here is server-owned.
+ */
+export interface WithdrawalRequestability {
+  requestable: boolean;
+  blocking_reasons: string[];
+  authoritative_eligibility_reasons: string[];
+}
+
+export interface WithdrawalCurrentState {
+  salary_amount_minor?: number | null;
+  earned_amount_minor?: number | null;
+  policy_limit_minor?: number | null;
+  reserved_amount_minor?: number | null;
+  paid_amount_minor?: number | null;
+  available_amount_minor?: number | null;
+  max_requestable_amount_minor?: number | null;
+}
+
+export interface WithdrawalImpact {
+  remaining_available_amount_minor?: number | null;
+  remaining_max_requestable_amount_minor?: number | null;
+  requested_share_of_earned_bps?: number | null;
+  requested_share_of_policy_limit_bps?: number | null;
+  exposure_before_minor?: number | null;
+  exposure_after_minor?: number | null;
+  exposure_share_of_earned_before_bps?: number | null;
+  exposure_share_of_earned_after_bps?: number | null;
+}
+
+export interface WithdrawalFrequency {
+  withdrawals_this_period: number;
+  max_withdrawals_per_period?: number | null;
+  remaining_slots_before?: number | null;
+  remaining_slots_after?: number | null;
+}
+
+export interface WithdrawalBudgetImpact {
+  available: boolean;
+  total_budget_minor?: number | null;
+  current_spent_minor?: number | null;
+  current_remaining_minor?: number | null;
+  withdrawal_share_of_budget_bps?: number | null;
+}
+
+export interface WithdrawalDataQuality {
+  has_transactions: boolean;
+  has_budget: boolean;
+  has_goals: boolean;
+  unavailable_analysis?: string | null;
+}
+
 export interface WithdrawalAnalysis {
-  withdrawal_amount: number;
-  remaining_amount: number;
-  available_amount: number;
-  earned_amount: number;
-  accessed_amount: number;
-  total_income: number;
-  total_expenses: number;
-  net_balance: number;
-  covered_expenses: boolean;
-  reserve_status: string;
-  risk_level: string;
-  recommendation: string;
-  explanation: string;
-  disclaimer: string;
+  requested_amount_minor: number;
+  requestability: WithdrawalRequestability;
+  current_state: WithdrawalCurrentState;
+  impact: WithdrawalImpact;
+  withdrawal_frequency: WithdrawalFrequency;
+  budget_impact: WithdrawalBudgetImpact;
+  data_quality: WithdrawalDataQuality;
+  snapshot_only: boolean;
 }
 
 export interface CopilotFact {
@@ -230,11 +500,24 @@ export interface CopilotResponse {
   disclaimer: string;
   authoritative_facts: AuthoritativeCopilotFacts;
   withdrawal_analysis: WithdrawalAnalysis | null;
+  product_search_results: ProductSearchResultItem[] | null;
   conversation_id: string | null;
   conversation_persisted: boolean;
   ai_metadata: CopilotMetadata;
   read_only: boolean;
   snapshot_only: boolean;
+}
+
+export interface ProductSearchResultItem {
+  source: string;
+  product_id: string;
+  title: string;
+  price_minor: number;
+  currency: string;
+  seller: string | null;
+  url: string | null;
+  availability: string | null;
+  delivery_info: string | null;
 }
 
 class ApiError extends Error {
@@ -532,7 +815,7 @@ export const api = {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const detail = data?.error || data?.detail || data?.message || "Registration failed";
+        const detail = toReadableError(data?.error ?? data?.detail ?? data?.message, "Registration failed");
         throw new ApiError(detail, response.status);
       }
       if (data.access_token) setToken(data.access_token);
@@ -547,7 +830,7 @@ export const api = {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const detail = data?.error || data?.detail || data?.message || "Login failed";
+        const detail = toReadableError(data?.error ?? data?.detail ?? data?.message, "Login failed");
         throw new ApiError(detail, response.status);
       }
       if (data.access_token) setToken(data.access_token);
@@ -583,6 +866,82 @@ export const api = {
       return rest;
     },
     me: () => request<User>("/auth/me"),
+  },
+
+  employers: {
+    // Creates a company for the authenticated user, who becomes its
+    // employer_admin. Requires a valid access token (attached by `request`).
+    create: (data: EmployerCreate) =>
+      request<EmployerRead>("/employers/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    // The employer the caller administers, resolved server-side from their
+    // EmployerAdmin membership. Returns 404 when the account has no employer.
+    mine: () => request<EmployerRead>("/employers/mine"),
+    get: (employerId: string) =>
+      request<EmployerRead>(`/employers/${encodeURIComponent(employerId)}`),
+    getPolicy: (employerId: string) =>
+      request<EwaPolicyRead>(`/employers/${encodeURIComponent(employerId)}/ewa/policy`),
+    listRequests: (employerId: string, status?: string) => {
+      const query = status ? `?status_filter=${encodeURIComponent(status)}` : "";
+      // NOTE: this route lives under the /ewa router prefix.
+      return request<WageAccessRequestRead[]>(
+        `/ewa/employers/${encodeURIComponent(employerId)}/requests${query}`,
+      );
+    },
+  },
+
+  employees: {
+    // Creates an Employee record for an existing ARQAU user. The caller must
+    // have employer scope (EmployerAdmin membership); the service rejects
+    // unknown users and duplicate profiles.
+    create: (data: {
+      user_id: string;
+      display_name?: string;
+      external_employee_id?: string;
+      status?: string;
+    }) =>
+      request<EmployeeRead>("/employees/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  },
+
+  employments: {
+    // Links an Employee to the caller's employer. employer_id is derived
+    // server-side from /employers/mine and re-validated against scope.
+    create: (data: {
+      employee_id: string;
+      employer_id: string;
+      employment_type?: string;
+      status?: string;
+      start_date?: string;
+      end_date?: string;
+      eligible_from?: string;
+      eligible_to?: string;
+    }) =>
+      request<EmploymentRead>("/employments/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  },
+
+  salary: {
+    // One salary profile per employment. employment must be in scope.
+    create: (data: {
+      employment_id: string;
+      currency: string;
+      monthly_salary_amount_minor: number;
+      pay_schedule: string;
+      payday_day?: number;
+      effective_from: string;
+      effective_to?: string;
+    }) =>
+      request<SalaryProfileRead>("/salary-profiles/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
   },
 
   onboarding: {
@@ -645,6 +1004,22 @@ export const api = {
     getRequests: () => request<WageAccessRequest[]>("/ewa/requests"),
   },
 
+  financial: {
+    // Authoritative, read-only financial context for the authenticated user.
+    // Identity comes exclusively from the access token; no caller-controlled
+    // user_id / employee_id / employer_id selectors are sent.
+    getContext: () => request<FinancialContext>("/financial/context"),
+
+    // Deterministic, read-only analysis of a hypothetical withdrawal amount.
+    // Strictly amount_minor, server-resolved identity. Never creates, reserves
+    // or mutates anything: actual withdrawals require POST /ewa/request.
+    analyzeScenario: (amount_minor: number) =>
+      request<WithdrawalAnalysis>("/financial/withdrawal-analysis", {
+        method: "POST",
+        body: JSON.stringify({ amount_minor }),
+      }),
+  },
+
   ai: {
     analyzeWithdrawal: (amount_tenge: number) =>
       request<WithdrawalDecisionResponse>("/financial/withdrawal-decision", {
@@ -656,6 +1031,13 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ message, conversation_id }),
       }),
+    demo: {
+      chat: (message: string, conversation_id?: string) =>
+        request<CopilotResponse>("/demo/ai/chat", {
+          method: "POST",
+          body: JSON.stringify({ message, conversation_id }),
+        }),
+    },
   },
 };
 

@@ -124,6 +124,12 @@ class AuthoritativeCopilotFacts(BaseModel):
     minimum_withdrawal_minor: Optional[int] = None
     maximum_withdrawal_minor: Optional[int] = None
 
+    # Reserve tracking (period surplus vs target, not actual savings)
+    reserve_target_minor: Optional[int] = None
+    period_net_surplus_minor: Optional[int] = None
+    reserve_shortfall_minor: Optional[int] = None
+    reserve_progress_ratio: Optional[float] = None
+
     eligible: Optional[bool] = None
     eligibility_reasons: list[str] = Field(default_factory=list)
     can_request_withdrawal: Optional[bool] = None
@@ -181,6 +187,8 @@ class CopilotResponse(BaseModel):
 
     withdrawal_analysis: Optional[WithdrawalAnalysis] = None
 
+    product_search_results: Optional[list["ProductSearchResultItem"]] = None
+
     conversation_id: Optional[str] = None
     conversation_persisted: bool = False
 
@@ -188,3 +196,16 @@ class CopilotResponse(BaseModel):
 
     read_only: bool = True
     snapshot_only: bool = True
+
+
+class ProductSearchResultItem(BaseModel):
+    """Product search result item returned in AI chat response."""
+    source: str
+    product_id: str
+    title: str
+    price_minor: int
+    currency: str
+    seller: Optional[str] = None
+    url: Optional[str] = None
+    availability: Optional[str] = None
+    delivery_info: Optional[str] = None

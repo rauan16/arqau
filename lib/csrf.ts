@@ -42,8 +42,29 @@ export function getCsrfConfig(): CsrfConfig {
   return _config;
 }
 
+/**
+ * Resolves the configured allowed origin, or null when NEXT_PUBLIC_APP_URL is
+ * not set. Never throws: callers decide how to handle a missing configuration.
+ */
+function resolveConfiguredOrigin(): CsrfConfig | null {
+  try {
+    return getCsrfConfig();
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export function validateCsrfOrigin(request: NextRequest): { valid: boolean; error?: string } {
-  const config = getCsrfConfig();
+  const configured = resolveConfiguredOrigin();
   const origin = request.headers.get("origin");
 
   // Missing Origin is a hard failure for cookie-authenticated mutating endpoints
@@ -62,11 +83,53 @@ export function validateCsrfOrigin(request: NextRequest): { valid: boolean; erro
   }
 
   // Compare against explicitly configured allowed origin
-  if (origin !== config.allowedOrigin) {
-    return { valid: false, error: "Invalid Origin" };
+  if (configured) {
+    if (origin !== configured.allowedOrigin) {
+      return { valid: false, error: "Invalid Origin" };
+    }
+    return { valid: true };
   }
 
+  // No NEXT_PUBLIC_APP_URL configured. In development this is the common case,
+  // so allow only a same-origin call from a loopback origin: the browser must
+  // report an Origin that is loopback AND identical to the origin the request
+  // was sent to. Every other case fails closed, including all of production,
+  // where a missing configuration is a deployment error and never a silent
+  // bypass. The cookie this guard protects is httpOnly, SameSite=Lax and
+  // path-scoped, so it is only ever attached to such same-origin requests.
+  if (process.env.NODE_ENV === "production") {
+    return { valid: false, error: "CSRF origin is not configured" };
+  }
+  if (!isLoopbackOrigin(origin)) {
+    return { valid: false, error: "Invalid Origin" };
+  }
+  const requestOrigin = request.nextUrl?.origin;
+  if (!requestOrigin || origin !== requestOrigin) {
+    return { valid: false, error: "Invalid Origin" };
+  }
   return { valid: true };
+}
+
+/**
+ * Route-handler guard: returns an error Response when the request must be
+ * rejected, or null when it may proceed. Never throws, so a broken CSRF
+ * configuration surfaces as a JSON error instead of an unhandled HTML 500.
+ */
+export function csrfGuard(request: NextRequest): Response | null {
+  let result: { valid: boolean; error?: string };
+  try {
+    result = validateCsrfOrigin(request);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "CSRF configuration error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: 503,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store, private" },
+    });
+  }
+  if (!result.valid) {
+    return createCsrfErrorResponse(result.error || "Invalid Origin");
+  }
+  return null;
 }
 
 export function createCsrfErrorResponse(error: string) {
