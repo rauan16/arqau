@@ -1,2 +1,10 @@
-import { AuthPage } from "@/components/app/EntryFlows";
-export default function Page() { return <AuthPage mode="signup" />; }
+import { Suspense } from "react";
+import { ComingSoon } from "@/components/app/ComingSoon";
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <ComingSoon />
+    </Suspense>
+  );
+}
