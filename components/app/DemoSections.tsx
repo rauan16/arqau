@@ -52,6 +52,8 @@ import { buildDemoDecision, buildDemoOverview, type DemoOverview as DemoOverview
 import { buildDemoFinancialContext, evaluateDemoAffordability, type DemoFinancialContext } from "@/lib/demoFinancialContext";
 import { AiGuidancePanelView } from "@/components/app/DashboardOverview";
 
+type DemoTransactionExtended = Transaction & { amount: number };
+
 const panel = "rounded-[24px] border border-ink/[0.07] bg-white p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)] sm:p-6";
 const finInput = "w-full rounded-[12px] border border-ink/[0.12] bg-cream px-4 py-3 text-[14px] outline-none transition-colors focus:border-orange-deep";
 const pillActive = "bg-orange-soft text-orange";
@@ -248,7 +250,7 @@ export function DemoFinancePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const transactions: Transaction[] = useMemo(
+  const transactions: DemoTransactionExtended[] = useMemo(
     () =>
       state.transactions.map((tx) => ({
         id: tx.id,
@@ -769,6 +771,17 @@ type ChatMessage = {
     paydayDate?: string;
     currency?: string;
   };
+  product_search_results?: {
+    source: string;
+    product_id: string;
+    title: string;
+    price_minor: number;
+    currency: string;
+    seller?: string | null;
+    url?: string | null;
+    availability?: string | null;
+    delivery_info?: string | null;
+  }[];
   error?: string;
   fallbackUsed?: boolean;
   provider?: string | null;
@@ -825,8 +838,11 @@ const renderMarkdown = (text: string): React.ReactNode => {
   let i = 0;
   let listKeyCounter = 0;
 
-  const renderBold = (cell: string) => {
-    return cell.replace(/\*\*(.+?)\*\*/g, <span key={Math.random()} className="font-bold">{$1}</span>);
+  const renderBold = (cell: string): React.ReactNode => {
+    const parts = cell.split(/\*\*(.+?)\*\*/);
+    return parts.map((part, idx) =>
+      idx % 2 === 1 ? <span key={idx} className="font-bold">{part}</span> : part
+    );
   };
 
   while (i < lines.length) {
@@ -902,18 +918,18 @@ const renderMarkdown = (text: string): React.ReactNode => {
       }
     }
 
-    // Headers: # ## ### etc.
+// Headers: # ## ### etc.
 
     // Headers: # ## ### etc.
     const headerMatch = line.match(/^(\#{1,6})\s(.+)/);
     if (headerMatch) {
       const level = headerMatch[1].length;
       const text = headerMatch[2];
-      // Map to ARQAU compatible heading sizes
-      const hClass = level === 1 ? "text-[32px] font-extrabold leading-[1] tracking-[-0.04em] sm:text-[48px]" :
-                     level === 2 ? "text-[24px] font-bold leading-[1.1] sm:text-[36px]" :
-                     level === 3 ? "text-[20px] font-semibold leading-relaxed" :
-                                  "text-[16px] font-medium";
+      // Map to ARQAU compatible heading sizes (compact for mobile)
+      const hClass = level === 1 ? "text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em]" :
+                     level === 2 ? "text-[18px] font-bold leading-[1.2]" :
+                     level === 3 ? "text-[16px] font-semibold leading-relaxed" :
+                                   "text-[14px] font-medium";
       elements.push(<p key={i} className={hClass}>{text}</p>);
       i++;
       continue;
@@ -1034,14 +1050,15 @@ const renderMarkdown = (text: string): React.ReactNode => {
           }
         : undefined;
 
-      addMessage({
+addMessage({
         role: "assistant",
         content: response.response,
         calculations: calc,
         fallbackUsed: response.ai_metadata.fallback_used,
         provider: response.ai_metadata.provider,
-fallbackReason: response.ai_metadata.fallback_reason,
-});
+        fallbackReason: response.ai_metadata.fallback_reason,
+        product_search_results: response.product_search_results || [],
+      });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : locale === "ru" ? "Ошибка отправки вопроса." : "Failed to send question.";
@@ -1201,6 +1218,26 @@ fallbackReason: response.ai_metadata.fallback_reason,
                 >
                   {renderMarkdown(msg.content)}
                   {msg.calculations && renderFinancialCard(msg.calculations)}
+                  {msg.product_search_results && msg.product_search_results.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-[12px] font-semibold text-ink-soft mb-2">
+                        {locale === "ru" ? "🛍 Демо-каталог товаров (мок-данные)" : "🛍 Demo product catalog (mock data)"}
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {msg.product_search_results.map((product, idx) => (
+                          <div key={idx} className="rounded-[12px] border border-ink/[0.08] bg-white p-3">
+                            <p className="font-semibold text-[13px] text-ink">{product.title}</p>
+                            <p className="text-[14px] font-bold text-orange mt-1">
+                              {product.price_minor ? (product.price_minor / 100).toLocaleString() : "—"} {product.currency || "KZT"}
+                            </p>
+                            {product.seller && <p className="text-[12px] text-ink-soft mt-1">Продавец: {product.seller}</p>}
+                            {product.availability && <p className="text-[12px] text-ink-soft">Наличие: {product.availability}</p>}
+                            {product.delivery_info && <p className="text-[12px] text-ink-soft">Доставка: {product.delivery_info}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {msg.fallbackUsed && (
                     <p className="mt-2 text-[11px] text-ink-soft/70">
                       {locale === "ru" ? "Использован детерминированный расчёт." : "Deterministic calculation used."}
