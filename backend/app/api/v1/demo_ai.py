@@ -45,6 +45,8 @@ from app.services.ai_copilot import (
     get_copilot_provider,
     reset_production_provider,
     extract_hypothetical_amount_minor,
+    is_purchase_affordability_question,
+    is_withdrawal_question,
     sanitize_provider_payload,
 )
 from app.services.product_search import (
@@ -515,15 +517,21 @@ async def demo_chat_endpoint(
     # Optionally analyse a hypothetical withdrawal/purchase amount.
     analysis: Optional[WithdrawalAnalysis] = None
     amount_minor = extract_hypothetical_amount_minor(message)
-    if amount_minor is not None:
+    purchase_affordability_question = is_purchase_affordability_question(message)
+    # The EWA withdrawal evaluator is only for wage-access questions. A product
+    # purchase is a separate scenario: do not treat the EWA limit as cash.
+    if amount_minor is not None and is_withdrawal_question(message):
         ctx = build_demo_financial_context()
         affordability = evaluate_demo_affordability(amount_minor // 100)
         analysis = _build_demo_affordability_analysis(amount_minor // 100, affordability, ctx)
         facts = _build_demo_authoritative_facts(locale, analysis=analysis)
 
-    # Optionally search for products if the query is shopping-related.
+    # Direct affordability questions with a supplied price do not need mock
+    # catalogue offers. Keep product lookup for explicit shopping searches.
     product_search_results = []
-    if is_shopping_query(message):
+    if is_shopping_query(message) and not (
+        amount_minor is not None and purchase_affordability_question
+    ):
         try:
             search_service = get_product_search_service()
             search_result = await search_service.search(message, limit=5)

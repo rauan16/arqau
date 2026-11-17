@@ -77,6 +77,9 @@ from app.services.ai_copilot import (
     contains_forbidden_recommendation,
     find_unsupported_amount,
     generate_copilot_answer,
+    extract_hypothetical_amount_minor,
+    is_purchase_affordability_question,
+    is_withdrawal_question,
     get_copilot_provider,
     reset_production_provider,
     sanitize_provider_payload,
@@ -1545,3 +1548,20 @@ def asyncio_run(coro):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRussianPurchaseAffordabilityParsing(unittest.TestCase):
+    def test_macbook_question_parses_grouped_tenge_amount_as_minor_units(self) -> None:
+        question = "Могу ли я позволить себе купить MacBook за 500 000 тенге?"
+        self.assertTrue(is_purchase_affordability_question(question))
+        self.assertFalse(is_withdrawal_question(question))
+        self.assertEqual(extract_hypothetical_amount_minor(question), 50_000_000)
+
+    def test_macbook_question_accepts_nonbreaking_space_and_tenge_symbol(self) -> None:
+        question = "Могу ли я купить MacBook за 500\\u00a0000 ₸?"
+        self.assertEqual(extract_hypothetical_amount_minor(question), 50_000_000)
+
+    def test_purchase_price_is_not_classified_as_an_ewa_withdrawal(self) -> None:
+        question = "Can I afford to buy a laptop for 500,000 KZT?"
+        self.assertTrue(is_purchase_affordability_question(question))
+        self.assertFalse(is_withdrawal_question(question))

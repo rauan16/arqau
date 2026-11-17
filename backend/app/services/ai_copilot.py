@@ -235,6 +235,8 @@ If important information is missing, explain what is missing or ask a focused fo
 
 Never present an unsupported affordability estimate as a confirmed fact.
 
+For purchases, never treat available EWA capacity as cash, a bank balance, or confirmed savings. Do not judge affordability by comparing the purchase price with the EWA limit alone. Use known income, recorded expenses, upcoming bills, reserve targets, and actual savings only when they are explicitly available.
+
 ## 6. HYPOTHETICAL FINANCIAL SCENARIOS
 
 Users may provide their own numbers and ask you to analyze hypothetical situations.
@@ -595,6 +597,14 @@ class OpenAICopilotProvider(CopilotProvider):
                     "schema": schema,
                     "strict": False,
                 },
+            }
+
+        # OpenRouter can route a model across several providers. Require the
+        # selected endpoint to support json_schema and enable JSON repair.
+        if self._api_key.startswith("sk-or-"):
+            create_kwargs["extra_body"] = {
+                "provider": {"require_parameters": True},
+                "plugins": [{"id": "response-healing"}],
             }
 
         logger.info(
@@ -1053,6 +1063,12 @@ _WITHDRAWAL_KEYWORDS = (
     "early salary",
     "early pay",
     "ewa",
+    "вывести",
+    "вывод",
+    "снять",
+    "снятие",
+    "аванс",
+    "досрочно получить",
 )
 
 # Purchase/affordability keywords: questions about whether something can be
@@ -1068,6 +1084,13 @@ _PURCHASE_AFFORDABILITY_KEYWORDS = (
     "can i buy",
     "can i afford",
     "can i spend",
+    "купить",
+    "покуп",
+    "позволить себе",
+    "потратить",
+    "стоимость",
+    "цена",
+    "приобрести",
 )
 
 # Markers indicating the user is asking about the past rather than evaluating a
@@ -1107,8 +1130,16 @@ _AMOUNT_CONTEXT_RE = re.compile(
     r"|cost\s+of\s+"
     r"|cost\s+"
     r"|price\s+of\s+"
-    r"|price\s+)"
-    r"\D{0,10}?(\d[\d,]*)",
+    r"|price\s+"
+    r"|за\s+"
+    r"|на\s+сумму\s+"
+    r"|стоимостью\s+"
+    r"|стоимость\s+"
+    r"|ценой\s+"
+    r"|цену\s+"
+    r"|цена\s+"
+    r"|по\s+цене\s+)"
+    r"\D{0,16}?(\d[\d,]*(?:[ \u00a0\u202f]\d{3})*)",
     re.IGNORECASE,
 )
 
@@ -1135,6 +1166,16 @@ def _looks_hypothetical_financial_question(message: str) -> bool:
     return _looks_withdrawal_specific(message) or _looks_purchase_affordability_specific(message)
 
 
+def is_withdrawal_question(message: str) -> bool:
+    """Public classifier used by the demo route to keep EWA analysis separate from purchases."""
+    return _looks_withdrawal_specific(message)
+
+
+def is_purchase_affordability_question(message: str) -> bool:
+    """Public classifier for hypothetical purchase-affordability scenarios."""
+    return _looks_purchase_affordability_specific(message)
+
+
 def extract_hypothetical_amount_minor(message: str) -> Optional[int]:
     """Extract a concrete hypothetical financial amount in integer minor units.
 
@@ -1157,13 +1198,19 @@ def extract_hypothetical_amount_minor(message: str) -> Optional[int]:
     if "." in raw:
         return None
     try:
-        amount = int(raw.replace(",", ""))
+        normalized_amount = (
+            raw.replace(",", "")
+            .replace(" ", "")
+            .replace("\u00a0", "")
+            .replace("\u202f", "")
+        )
+        amount = int(normalized_amount)
     except ValueError:
         return None
     # Detect if the amount is in major units (KZT/₸/tenge context) vs minor units.
     # Check text immediately after the matched amount for currency indicators.
-    after = message[match.end():match.end() + 20].lower()
-    if any(kw in after for kw in ("kzt", "₸", "tenge", "тиин", "тиын")):
+    after = message[match.end():match.end() + 24].lower()
+    if any(kw in after for kw in ("kzt", "₸", "tenge", "тенге", "тг", "тиин", "тиын")):
         # Amount is in major units (KZT), convert to minor units (tiyin).
         amount *= 100
     elif "minor unit" in after or "minor units" in after:
