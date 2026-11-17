@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, finance, ewa, ai, demo_ai, employers, employees, employments, salary, rbac, financial_context, products
+from app.api.v1 import auth, finance, ewa, ai, demo_ai, employers, employees, employments, salary, rbac, financial_context
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
