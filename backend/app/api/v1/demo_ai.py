@@ -358,7 +358,7 @@ def _build_demo_fallback_answer(
     # EWA education (system prompt §6): explain EWA, role of employer/employee, policy controls
     if locale == "ru":
         ewa_edu = (
-            f"EWA (EARned wage access) — это możliwoсть получить часть зарплаты до дня выплаты. "
+            f"EWA (Earned Wage Access) — это возможность получить часть заработанной зарплаты до дня выплаты. "
             f"Политика EWA настраивает работодатель. Сейчас для вашего работодателя "
             f"EWA-политика не настроена, поэтому досрочное получение недоступно. "
             f"Оставшийся лимит EWA — **{ewa_available_kzt} ₸** — это способность системы, "
@@ -378,17 +378,17 @@ def _build_demo_fallback_answer(
     if locale == "ru":
         rec1 = (
             f"1. Проверьте, настроена ли EWA-политика у вашего работодателя — "
-            f"без этого досрочного доступа к зарплате не будет доступно."
+            f"без нее досрочное получение зарплаты будет недоступно."
         )
         rec2 = (
             f"2. Учитывайте, что period surplus {ctx.reserve_saved} ₸ из {ctx.reserve_target} ₸ "
-            f"(100%) — это остаток периода, а не гарантированные накопления на банковском счете. "
-            f"До тех пор пока резерв не подтвержден."
+            f"(100%) — это остаток периода, а не подтвержденные накопления на банковском счете. "
+            f"Фактический баланс и размер сбережений неизвестны."
         )
         rec3 = (
             f"3. Обязательные платежи перед зарплатой ({ctx.upcoming_bills_unpaid_total} ₸) "
-            f"могут сказаться на доступных средствах. Рекомендуется сохранить резерв untouched "
-            f"перед следующей зарплатой."
+            f"могут уменьшить сумму, которая останется до следующей зарплаты. По возможности "
+            f"не используйте деньги, которые планируете оставить в резерве."
         )
     else:
         rec1 = (
@@ -410,17 +410,23 @@ def _build_demo_fallback_answer(
     parts.append(rec3)
 
     # --- Limitation (system prompt §2: status/limitation section) ---
-    parts.append(
-        f"Limitation: reserve progress ratio of 100% reflects period surplus (earned − expenses), "
-        f"not accumulated savings. Actual bank balance and savings are not confirmed."
-    )
+    if locale == "ru":
+        parts.append(
+            "Важно: показатель резерва 100% рассчитан по разнице доходов и расходов. "
+            "Он не подтверждает наличие такой суммы на банковском счете."
+        )
+    else:
+        parts.append(
+            "Limitation: 100% reserve progress reflects period surplus (earned minus expenses), "
+            "not confirmed savings. Actual bank balance is unknown."
+        )
 
     # --- Key facts (system prompt §3: keep tables independent, one per heading) ---
     key_facts = [
         CopilotFact(
             code="available_amount",
             text=(
-                f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
+                f"Доступный лимит: {ewa_available_kzt} ₸ (емкость EWA, не рекомендация по снятию)."
                 if locale == "ru"
                 else f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
             ),
@@ -428,7 +434,7 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="earned_amount",
             text=(
-                f"Earned: {facts.earned_amount_minor // 100} KZT."
+                f"Заработано: {facts.earned_amount_minor // 100} ₸."
                 if locale == "ru"
                 else f"Earned: {facts.earned_amount_minor // 100} KZT."
             ),
@@ -436,7 +442,7 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="reserve_target",
             text=(
-                f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
+                f"Целевой резерв: {ctx.reserve_target} ₸, остаток за период: {ctx.reserve_saved} ₸."
                 if locale == "ru"
                 else f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
             ),
@@ -444,7 +450,7 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="days_to_payday",
             text=(
-                f"Days to payday: {ctx.days_to_payday}."
+                f"Дней до зарплаты: {ctx.days_to_payday}."
                 if locale == "ru"
                 else f"Days to payday: {ctx.days_to_payday}."
             ),

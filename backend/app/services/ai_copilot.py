@@ -605,6 +605,9 @@ class OpenAICopilotProvider(CopilotProvider):
             create_kwargs["extra_body"] = {
                 "provider": {"require_parameters": True},
                 "plugins": [{"id": "response-healing"}],
+                # Avoid spending the completion budget on hidden reasoning;
+                # the Copilot requires a concise, complete JSON payload.
+                "reasoning": {"enabled": False},
             }
 
         logger.info(
