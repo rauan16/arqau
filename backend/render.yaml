@@ -6,6 +6,8 @@ services:
     # version is pinned separately via .python-version (3.12.11) and
     # runtime.txt. The deprecated `env:` key is not part of the schema.
     runtime: python
+    branch: release/v1.0-demo
+    rootDir: backend
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT

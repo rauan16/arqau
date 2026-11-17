@@ -59,6 +59,10 @@ python-dotenv==1.2.4
 # chat.completions.create(..., response_format=, max_tokens=, temperature=,
 # timeout=), the ResponseFormatJSONSchema union, and the APIConnectionError /
 # APIStatusError / APITimeoutError / RateLimitError constructors.
-# Note: openai >= 2.x depends on httpx2, not httpx. httpx is a test-only
-# dependency here and is declared in requirements-dev.txt.
+# Note: openai >= 2.x depends on httpx2, not httpx. httpx is a runtime
+# dependency here (AI Copilot `app/services/ai_copilot.py` uses httpx for
+# provider payload fetching); it was previously declared in
+# requirements-dev.txt.
 openai==3.24.0
+greenlet==3.5.6
+httpx==0.28.1
