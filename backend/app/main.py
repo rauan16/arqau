@@ -1,43 +1,49 @@
+"""FastAPI application entrypoint for the ARQAU MVP.
+
+Keep this entrypoint self-contained: the release branch intentionally contains
+only the middleware and support modules required by the deployed MVP.
+"""
+
+from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from pathlib import Path
-from app.config import get_settings
+
 from app import database
-from app.models import Base
 from app.api.v1 import api_router
+from app.config import get_settings
 from app.core.body_limit import BodyLimitMiddleware
-from app.core.logging_config import configure_logging, get_logger
-from app.core.health import get_liveness, get_readiness
-from app.core.exceptions import register_exception_handlers
-from app.core.middleware import add_middleware
+from app.models import Base
 
 settings = get_settings()
 
-# Configure logging at module load time
-configure_logging(
-    level=settings.environment == "production" and "INFO" or "DEBUG",
+logging.basicConfig(
+    level=logging.INFO if settings.environment == "production" else logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
-
-logger = get_logger(__name__)
+logger = logging.getLogger("arqau.api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        # Detect legacy local database (./arqau.db) to avoid polluting it during tests
+        # Production schema changes are managed by Alembic before Uvicorn starts.
+        # For local development, create missing tables unless this is the legacy
+        # database file that must remain untouched.
         engine_url = database.engine.url
         is_legacy_db = (
             engine_url.drivername == "sqlite+aiosqlite"
             and engine_url.database is not None
             and Path(engine_url.database).resolve() == Path("./arqau.db").resolve()
         )
-
         if settings.environment != "production" and not is_legacy_db:
             async with database.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+
         if not settings.openai_api_key:
-            logger.warning("OPENAI_API_KEY is not set. AI endpoints will return errors.")
+            logger.warning("OPENAI_API_KEY is not set; AI endpoints will use their configured fallback.")
         yield
     finally:
         await database.dispose_engine()
@@ -45,13 +51,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ARQAU API", version="0.1.0", lifespan=lifespan)
 
-# Register centralized exception handlers
-register_exception_handlers(app)
-
-# Add custom middleware (order matters - first added = outermost)
-add_middleware(app)
-
-# Add body limit middleware (before CORS to reject oversized payloads early)
+# Reject oversized request payloads before CORS/auth/route processing.
 app.add_middleware(BodyLimitMiddleware)
 
 app.add_middleware(
@@ -70,16 +70,7 @@ async def health():
 
 @app.get("/health/live")
 async def health_live():
-    """Liveness probe - confirms process is alive."""
-    return await get_liveness()
-
-
-@app.get("/health/ready")
-async def health_ready():
-    """Readiness probe - confirms service can accept traffic."""
-    readiness = await get_readiness()
-    status_code = 200 if readiness.status == "ready" else 503
-    return readiness
+    return {"status": "ok"}
 
 
 app.include_router(api_router)
