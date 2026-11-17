@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import tempfile
 import unittest
@@ -107,8 +107,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         production_settings = config.Settings(
             environment="production",
             database_url="postgresql+asyncpg://user:password@localhost/arqau",
-            secret_key="p" * 32,
-            cors_origins="https://example.test",
+            secret_key="production-secret",
             openai_api_key="server-key",
         )
         with patch.object(main, "settings", production_settings):
@@ -124,4 +123,3 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

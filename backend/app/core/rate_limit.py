@@ -187,6 +187,11 @@ def get_demo_ai_limiter() -> RateLimiter:
     return _DEMO_AI_LIMITER
 
 
+def reset_demo_ai_limiter() -> None:
+    """Reset the demo AI rate limiter. Test helper only."""
+    _DEMO_AI_LIMITER.reset()
+
+
 async def enforce_demo_ai_rate_limit(request: Request) -> None:
     """Enforce IP-based rate limit for the public demo AI chat.
 

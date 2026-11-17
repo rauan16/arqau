@@ -3,6 +3,7 @@
 POST /demo/ai/chat accepts an arbitrary user question, builds the demo
 financial context from trusted server-side seed data, optionally runs the
 deterministic withdrawal analysis when the message contains a concrete amount,
+optionally searches for real products when the message is shopping-related,
 and returns a structured CopilotResponse.
 
 The LLM provider (OpenAI / OpenRouter) is called only server-side via
@@ -17,7 +18,10 @@ never touches authenticated user data.
 from __future__ import annotations
 
 import re
+import hashlib
+import secrets
 from typing import Any, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import StringConstraints
@@ -32,6 +36,7 @@ from app.services.ai_copilot import (
     FALLBACK_RATE_LIMIT,
     FALLBACK_SCHEMA_INVALID,
     FALLBACK_TIMEOUT,
+    FALLBACK_TOKEN_LIMIT,
     FALLBACK_UNSAFE_CONTENT,
     FALLBACK_UNSUPPORTED_AMOUNT,
     FakeCopilotProvider,
@@ -40,6 +45,13 @@ from app.services.ai_copilot import (
     get_copilot_provider,
     reset_production_provider,
     extract_hypothetical_amount_minor,
+    is_purchase_affordability_question,
+    is_withdrawal_question,
+    sanitize_provider_payload,
+)
+from app.services.product_search import (
+    get_product_search_service,
+    is_shopping_query,
 )
 from app.core.rate_limit import enforce_demo_ai_rate_limit
 from app.services.demo_financial_context import (
@@ -70,6 +82,11 @@ router = APIRouter(prefix="/demo/ai", tags=["demo-ai"])
 
 MAX_MESSAGE_CHARS = 2000
 DEMO_USER_ID = "demo"
+
+# Conversation state (in-memory for demo; in production would use persistent storage)
+# Maps conversation_id to {"token": str, "messages": [{"role": "user"|"assistant", "content": str}]}
+_converstation_store = {}
+_conversations_tokens = {}
 
 DEFAULT_DISCLAIMER_RU = (
     "Это иллюстративное объяснение, а не финансовый совет. "
@@ -134,6 +151,10 @@ def _fallback_reason_text(reason: str, locale: str) -> str:
             "ru": "В ответе провайдера обнаружена Unsupported сумма. Показан детерминированный расчёт.",
             "en": "Unsupported amount detected in provider response. A deterministic calculation is shown instead.",
         },
+        FALLBACK_TOKEN_LIMIT: {
+            "ru": "Ответ провайдера обрезан лимитом генерации. Показан детерминированный расчёт.",
+            "en": "Provider response truncated by generation limit. A deterministic calculation is shown instead.",
+        },
     }
     return reasons.get(reason, {}).get(locale, "Показан детерминированный расчёт.")
 
@@ -144,34 +165,36 @@ def _build_demo_authoritative_facts(
 ) -> AuthoritativeCopilotFacts:
     """Build AuthoritativeCopilotFacts from demo context (server-owned)."""
     ctx = build_demo_financial_context()
-    ewa_available = ctx.available_amount * 100
     earned = ctx.earned_amount * 100
     salary = ctx.salary_amount * 100
 
     top_categories = [
         SpendingCategoryFact(category="Housing", amount_minor=45_000 * 100, transaction_count=1),
-        SpendingCategoryFact(category="Food", amount_minor=37_400 * 100, transaction_count=2),
-        SpendingCategoryFact(category="Transport", amount_minor=15_000 * 100, transaction_count=1),
-        SpendingCategoryFact(category="Health", amount_minor=13_000 * 100, transaction_count=1),
-        SpendingCategoryFact(category="Lifestyle", amount_minor=6_500 * 100, transaction_count=1),
+        SpendingCategoryFact(category="Food", amount_minor=(22_000) * 100, transaction_count=1),
+        SpendingCategoryFact(category="Transport", amount_minor=14_000 * 100, transaction_count=1),
     ]
 
     return AuthoritativeCopilotFacts(
         calculation_date=ctx.data_as_of[:10],
         pay_period_start=ctx.payday_date,
-        pay_period_end="2026-10-15",
+        pay_period_end="2026-11-16",
         salary_amount_minor=salary,
         currency=ctx.currency,
         earned_amount_minor=earned,
         policy_limit_minor=0,
         reserved_amount_minor=0,
         paid_amount_minor=0,
-        available_amount_minor=ewa_available,
-        max_requestable_amount_minor=ewa_available,
+        available_amount_minor=0,
+        max_requestable_amount_minor=0,
         minimum_withdrawal_minor=None,
         maximum_withdrawal_minor=None,
-        eligible=ctx.available_amount > 0,
-        eligibility_reasons=[],
+        # Reserve tracking (period surplus vs target, not actual savings)
+        reserve_target_minor=ctx.reserve_target * 100,
+        period_net_surplus_minor=ctx.reserve_saved * 100,
+        reserve_shortfall_minor=ctx.reserve_remaining * 100,
+        reserve_progress_ratio=ctx.reserve_progress,
+        eligible=False,
+        eligibility_reasons=["NO_EWA_POLICY"],
         can_request_withdrawal=False,
         withdrawals_this_period=0,
         max_withdrawals_per_period=None,
@@ -182,7 +205,7 @@ def _build_demo_authoritative_facts(
         paid_withdrawal_amount_minor=0,
         spending_available=True,
         total_spending_minor=ctx.expense_amount * 100,
-        transaction_count=8,
+        transaction_count=3,
         top_spending_categories=top_categories,
         budget_available=False,
         budget_total_minor=None,
@@ -210,23 +233,38 @@ def _build_demo_affordability_analysis(
     affordability: Any,
     ctx: Any,
 ) -> WithdrawalAnalysis:
-    """Construct a server-owned WithdrawalAnalysis from demo affordability result."""
+    """Construct a server-owned WithdrawalAnalysis from demo affordability result.
+
+    Uses authoritative EWA availability (0 when no policy) instead of demo ceiling.
+    """
+    # Get authoritative EWA facts to ensure consistency with authoritative_facts
+    authoritative_facts = _build_demo_authoritative_facts("en")
+    ewa_available_minor = authoritative_facts.available_amount_minor or 0
+    ewa_max_requestable_minor = authoritative_facts.max_requestable_amount_minor or 0
+
+    # Requestability must be consistent with authoritative EWA availability
+    # If no EWA policy, nothing is requestable regardless of demo ceiling
+    if authoritative_facts.eligible:
+        requestable = affordability.requestable
+    else:
+        requestable = False
+
     return WithdrawalAnalysis(
         requested_amount_minor=amount_tenge * 100,
         requestability=Requestability(
-            requestable=affordability.requestable,
+            requestable=requestable,
             blocking_reasons=[affordability.reason] if affordability.reason else [],
-            authoritative_eligibility_reasons=[],
+            authoritative_eligibility_reasons=authoritative_facts.eligibility_reasons or [],
         ),
         current_state=CurrentState(
             salary_amount_minor=ctx.salary_amount * 100,
             earned_amount_minor=ctx.earned_amount * 100,
-            available_amount_minor=ctx.available_amount * 100,
-            max_requestable_amount_minor=ctx.available_amount * 100,
+            available_amount_minor=ewa_available_minor,
+            max_requestable_amount_minor=ewa_max_requestable_minor,
         ),
         impact=Impact(
-            remaining_available_amount_minor=affordability.remaining_available * 100,
-            remaining_max_requestable_amount_minor=affordability.remaining_available * 100,
+            remaining_available_amount_minor=max(0, ewa_available_minor - amount_tenge * 100),
+            remaining_max_requestable_amount_minor=max(0, ewa_max_requestable_minor - amount_tenge * 100),
             requested_share_of_earned_bps=round(affordability.share_of_earned * 10000),
             exposure_after_minor=affordability.amount * 100,
         ),
@@ -241,13 +279,18 @@ def _build_demo_affordability_analysis(
 
 
 def _build_demo_fallback_answer(
-    facts: AuthoritativeCopilotFacts,
+    facts: Optional[AuthoritativeCopilotFacts],
     locale: str,
     fallback_reason: str,
+    analysis: Optional[WithdrawalAnalysis] = None,
 ) -> CopilotAnswer:
     """Build a deterministic fallback answer when the provider is unavailable."""
     disclaimer = DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
     ctx = build_demo_financial_context()
+
+    # Build authoritative facts if not provided (test helper compatibility)
+    if facts is None:
+        facts = _build_demo_authoritative_facts(locale, analysis=analysis)
 
     if fallback_reason == FALLBACK_NOT_CONFIGURED:
         intro = (
@@ -260,70 +303,148 @@ def _build_demo_fallback_answer(
     else:
         intro = _fallback_reason_text(fallback_reason, locale)
 
-    parts = [intro]
-    parts.append(
-        f"Доступно к выводу: {ctx.available_amount} ₸."
-        if locale == "ru"
-        else f"Available to access: {ctx.available_amount} ₸."
+    ewa_available_kzt = facts.available_amount_minor // 100
+
+    # --- Lead with the answer (system prompt §1) ---
+    # Single short conclusion + key number in bold
+    if locale == "ru":
+        lead = (
+            f"Финансовый обзор: за период заработано **{facts.earned_amount_minor // 100} ₸**, "
+            f"потрачено **{ctx.expense_amount} ₸**, остаток period surplus — **{ctx.reserve_saved} ₸** "
+            f"из целевого резерва **{ctx.reserve_target} ₸** (100%)."
+        )
+    else:
+        lead = (
+            f"Financial overview: earned this period **{facts.earned_amount_minor // 100} KZT**, "
+            f"expenses **{ctx.expense_amount} KZT**, period surplus **{ctx.reserve_saved} KZT** "
+            f"of reserve target **{ctx.reserve_target} KZT** (100%)."
+        )
+
+    # --- Key metrics (system prompt §2: compact table with relevant indicators) ---
+    # Use structured concise paragraphs; one paragraph per idea
+    metrics_ru = (
+        f"**Period surplus:** {ctx.reserve_saved} ₸ of **{ctx.reserve_target} ₸** reserve target ({int(ctx.reserve_progress * 100)}%). "
+        f"This is earned minus spent, not confirmed bank savings. "
+        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
+        f"**EWA capacity:** {ewa_available_kzt} ₸ (deterministic limit; no EWA policy configured). "
+        f"**Expenses this period:** {ctx.expense_amount} ₸ (Housing {ctx.expense_amount_Housing if hasattr(ctx, 'expense_amount_Housing') else ''}₸, "
+        f"Food {ctx.expense_amount_Food if hasattr(ctx, 'expense_amount_Food') else ''}₸, "
+        f"Transport {ctx.expense_amount_Transport if hasattr(ctx, 'expense_amount_Transport') else ''}₸)."
     )
-    parts.append(
-        f"Заработано в этом периоде: {ctx.earned_amount} ₸."
-        if locale == "ru"
-        else f"Earned this period: {ctx.earned_amount} ₸."
-    )
-    parts.append(
-        f"Целевой резерв: {ctx.reserve_target} ₸, накоплено: {ctx.reserve_saved} ₸."
-        if locale == "ru"
-        else f"Reserve target: {ctx.reserve_target} ₸, saved: {ctx.reserve_saved} ₸."
-    )
-    parts.append(
-        f"Предстоящие счета: {ctx.upcoming_bills_total} ₸ (из них неоплаченные: {ctx.upcoming_bills_unpaid_total} ₸)."
-        if locale == "ru"
-        else f"Upcoming bills: {ctx.upcoming_bills_total} ₸ (unpaid: {ctx.upcoming_bills_unpaid_total} ₸)."
-    )
-    parts.append(
-        f"До зарплаты: {ctx.days_to_payday} дней."
-        if locale == "ru"
-        else f"Days to payday: {ctx.days_to_payday}."
+    metrics_en = (
+        f"**Period surplus:** {ctx.reserve_saved} KZT of **{ctx.reserve_target} KZT** reserve target ({int(ctx.reserve_progress * 100)}%). "
+        f"This is earned minus spent, not confirmed bank savings. "
+        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
+        f"**EWA capacity:** {ewa_available_kzt} KZT (deterministic limit; no EWA policy configured). "
+        f"**Expenses this period:** {ctx.expense_amount} KZT (Housing, Food, Transport)."
     )
 
+    # --- Analysis & status (system prompt §2 order: analysis, then status/limitation) ---
+    parts = [lead]
+
+    # Expense breakdown - only relevant categories (Housing 45k, Food 22k, Transport 14k)
+    if locale == "ru":
+        expense_text = (
+            f"Основные статьи расходов: Жилье — 45 000 ₸, "
+            f"Еда — 22 000 ₸, Транспорт — 14 000 ₸."
+        )
+    else:
+        expense_text = (
+            f"Major expense categories: Housing — 45 000 KZT, "
+            f"Food — 22 000 KZT, Transport — 14 000 KZT."
+        )
+    parts.append(expense_text)
+
+    # EWA education (system prompt §6): explain EWA, role of employer/employee, policy controls
+    if locale == "ru":
+        ewa_edu = (
+            f"EWA (EARned wage access) — это możliwoсть получить часть зарплаты до дня выплаты. "
+            f"Политика EWA настраивает работодатель. Сейчас для вашего работодателя "
+            f"EWA-политика не настроена, поэтому досрочное получение недоступно. "
+            f"Оставшийся лимит EWA — **{ewa_available_kzt} ₸** — это способность системы, "
+            f"а не рекомендация или баланс на счете."
+        )
+    else:
+        ewa_edu = (
+            f"EWA (Earned Wage Access) — the ability to access a portion of earned wages before "
+            f"payday. The EWA policy is configured by the employer. For your employer, "
+            f"the EWA policy is not currently configured, so early access is unavailable. "
+            f"The remaining EWA limit **{ewa_available_kzt} KZT** is the system's capability, "
+            f"not a recommendation or account balance."
+        )
+    parts.append(ewa_edu)
+
+# Recommendations (system prompt §5: 2-3 specific, actionable recommendations)
+    if locale == "ru":
+        rec1 = (
+            f"1. Проверьте, настроена ли EWA-политика у вашего работодателя — "
+            f"без этого досрочного доступа к зарплате не будет доступно."
+        )
+        rec2 = (
+            f"2. Учитывайте, что period surplus {ctx.reserve_saved} ₸ из {ctx.reserve_target} ₸ "
+            f"(100%) — это остаток периода, а не гарантированные накопления на банковском счете. "
+            f"До тех пор пока резерв не подтвержден."
+        )
+        rec3 = (
+            f"3. Обязательные платежи перед зарплатой ({ctx.upcoming_bills_unpaid_total} ₸) "
+            f"могут сказаться на доступных средствах. Рекомендуется сохранить резерв untouched "
+            f"перед следующей зарплатой."
+        )
+    else:
+        rec1 = (
+            f"1. Check if your employer has an EWA policy configured — without it, "
+            f"early wage access will not be available."
+        )
+        rec2 = (
+            f"2. Note that the period surplus {ctx.reserve_saved} KZT of {ctx.reserve_target} KZT "
+            f"(100%) is period remainder, not guaranteed funds in a bank account. "
+            f"Actual bank savings are not confirmed."
+        )
+        rec3 = (
+            f"3. Upcoming mandatory payments before payday ({ctx.upcoming_bills_unpaid_total} KZT) "
+            f"may affect available funds. It is recommended to keep the reserve untouched "
+            f"until the next payday."
+        )
+    parts.append(rec1)
+    parts.append(rec2)
+    parts.append(rec3)
+
+    # --- Limitation (system prompt §2: status/limitation section) ---
+    parts.append(
+        f"Limitation: reserve progress ratio of 100% reflects period surplus (earned − expenses), "
+        f"not accumulated savings. Actual bank balance and savings are not confirmed."
+    )
+
+    # --- Key facts (system prompt §3: keep tables independent, one per heading) ---
     key_facts = [
         CopilotFact(
             code="available_amount",
             text=(
-                f"Доступно: {ctx.available_amount} ₸ (ёмкость EWA, не рекомендация к выводу)."
+                f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
                 if locale == "ru"
-                else f"Available: {ctx.available_amount} ₸ (EWA capacity, not a recommendation)."
+                else f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
             ),
         ),
         CopilotFact(
             code="earned_amount",
             text=(
-                f"Заработано: {ctx.earned_amount} ₸."
+                f"Earned: {facts.earned_amount_minor // 100} KZT."
                 if locale == "ru"
-                else f"Earned: {ctx.earned_amount} ₸."
+                else f"Earned: {facts.earned_amount_minor // 100} KZT."
             ),
         ),
         CopilotFact(
             code="reserve_target",
             text=(
-                f"Целевой резерв: {ctx.reserve_target} ₸, накоплено: {ctx.reserve_saved} ₸."
+                f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
                 if locale == "ru"
-                else f"Reserve target: {ctx.reserve_target} ₸, saved: {ctx.reserve_saved} ₸."
-            ),
-        ),
-        CopilotFact(
-            code="upcoming_bills",
-            text=(
-                f"Предстоящие счета: {ctx.upcoming_bills_total} ₸."
-                if locale == "ru"
-                else f"Upcoming bills: {ctx.upcoming_bills_total} ₸."
+                else f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
             ),
         ),
         CopilotFact(
             code="days_to_payday",
             text=(
-                f"До зарплаты: {ctx.days_to_payday} дн."
+                f"Days to payday: {ctx.days_to_payday}."
                 if locale == "ru"
                 else f"Days to payday: {ctx.days_to_payday}."
             ),
@@ -331,9 +452,13 @@ def _build_demo_fallback_answer(
     ]
 
     return CopilotAnswer(
-        response=" ".join(parts),
+        response="\n\n".join(parts),
         key_facts=key_facts,
-        data_limitations=[f"AI-провайдер недоступен: {fallback_reason}. Показан только детерминированный расчёт."],
+        data_limitations=[
+            "Reserve progress 100% reflects period surplus, not confirmed savings.",
+            "EWA availability is deterministic capacity, not a recommended withdrawal amount.",
+            "Actual bank balance and savings are not confirmed.",
+        ],
         suggested_questions=DEFAULT_SUGGESTED_QUESTIONS_RU if locale == "ru" else DEFAULT_SUGGESTED_QUESTIONS_EN,
         disclaimer=disclaimer,
         ai_metadata=CopilotMetadata(
@@ -346,6 +471,21 @@ def _build_demo_fallback_answer(
     )
 
 
+def _get_demo_housing_expense() -> int:
+    """Return the demo housing expense amount."""
+    return 45_000
+
+
+def _get_demo_food_expense() -> int:
+    """Return the demo food expense amount."""
+    return 22_000
+
+
+def _get_demo_transport_expense() -> int:
+    """Return the demo transport expense amount."""
+    return 14_000
+
+
 @router.post("/chat", response_model=CopilotResponse)
 async def demo_chat_endpoint(
     request: ChatRequest,
@@ -355,8 +495,9 @@ async def demo_chat_endpoint(
     """Public demo AI chat. No authentication required.
 
     Builds the demo financial context from trusted server-side seed data,
-    optionally analyses a hypothetical amount found in the message, and
-    returns a structured answer (LLM-generated or deterministic fallback).
+    optionally analyses a hypothetical amount found in the message,
+    optionally searches for real products when the message is shopping-related,
+    and returns a structured CopilotResponse.
     """
     message = (request.message or "").strip()
     if not message:
@@ -376,11 +517,42 @@ async def demo_chat_endpoint(
     # Optionally analyse a hypothetical withdrawal/purchase amount.
     analysis: Optional[WithdrawalAnalysis] = None
     amount_minor = extract_hypothetical_amount_minor(message)
-    if amount_minor is not None:
+    purchase_affordability_question = is_purchase_affordability_question(message)
+    # The EWA withdrawal evaluator is only for wage-access questions. A product
+    # purchase is a separate scenario: do not treat the EWA limit as cash.
+    if amount_minor is not None and is_withdrawal_question(message):
         ctx = build_demo_financial_context()
         affordability = evaluate_demo_affordability(amount_minor // 100)
         analysis = _build_demo_affordability_analysis(amount_minor // 100, affordability, ctx)
         facts = _build_demo_authoritative_facts(locale, analysis=analysis)
+
+    # Direct affordability questions with a supplied price do not need mock
+    # catalogue offers. Keep product lookup for explicit shopping searches.
+    product_search_results = []
+    if is_shopping_query(message) and not (
+        amount_minor is not None and purchase_affordability_question
+    ):
+        try:
+            search_service = get_product_search_service()
+            search_result = await search_service.search(message, limit=5)
+            if search_result.offers:
+                product_search_results = [
+                    {
+                        "source": o.source,
+                        "product_id": o.product_id,
+                        "title": o.title,
+                        "price_minor": o.price_minor,
+                        "currency": o.currency,
+                        "seller": o.seller,
+                        "url": o.url,
+                        "availability": o.availability,
+                        "delivery_info": o.delivery_info,
+                    }
+                    for o in search_result.offers
+                ]
+        except Exception:  # noqa: BLE001
+            # Product search is best-effort; don't fail the chat if it errors
+            pass
 
     # Build sanitized provider input (server-owned facts only).
     payload = build_demo_sanitized_input(
@@ -393,6 +565,10 @@ async def demo_chat_endpoint(
             "status": "comfortable" if analysis and analysis.requestability.requestable else "caution",
         } if analysis else None,
     )
+    # Add product search results if available (not part of analysis)
+    if product_search_results:
+        payload["product_search_results"] = product_search_results
+    payload = sanitize_provider_payload(payload)
 
     # Run the provider pipeline with safety guards and deterministic fallback.
     # `generate_copilot_answer` handles: not_configured, timeout, connection,
@@ -414,7 +590,7 @@ async def demo_chat_endpoint(
 
     # Build a locale-aware fallback answer when the provider was unavailable.
     if answer.ai_metadata.fallback_used:
-        fallback_answer = _build_demo_fallback_answer(facts, locale, answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR)
+        fallback_answer = _build_demo_fallback_answer(facts, locale, answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR, analysis)
         # Preserve provider/model attribution from the answer.
         fallback_answer.ai_metadata.provider = answer.ai_metadata.provider
         fallback_answer.ai_metadata.model = answer.ai_metadata.model
@@ -428,6 +604,7 @@ async def demo_chat_endpoint(
         disclaimer=disclaimer,
         authoritative_facts=facts,
         withdrawal_analysis=analysis,
+        product_search_results=product_search_results,
         conversation_id=request.conversation_id,
         conversation_persisted=False,
         ai_metadata=answer.ai_metadata,

@@ -1,78 +1,169 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { ArrowRight, BarChart3, CalendarClock, HelpCircle, ShieldCheck } from "lucide-react";
 import { scenario, formatTenge } from "@/lib/demoData";
 import { useTranslation } from "@/lib/language-context";
+import { easeOut, fadeUp } from "@/lib/animations";
 
-const inputs = ["Earned income", "Upcoming expenses", "Reserve target"];
+const SLIDER_MAX = scenario.available;
+const SAFE_AMOUNT = scenario.recommended;
+const UPCOMING_7D = 32000;
+const REGULAR_SPENDING = 48000;
 
-const easeOut = [0.22, 1, 0.36, 1] as const;
+function fill(template: string, values: Record<string, string>) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.replace(`{${key}}`, value),
+    template,
+  );
+}
 
 export default function RecommendationSection() {
   const { t } = useTranslation();
-  return (
-    <section className="py-28 lg:py-36 bg-cream">
-      <div className="container-arqau">
-        <div className="max-w-[680px] mb-16 lg:mb-20">
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: easeOut }}
-            className="eyebrow mb-5 reveal-text"
-          >
-            The ARQAU difference
-          </motion.p>
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, ease: easeOut }}
-            className="text-[38px] sm:text-[50px] lg:text-[60px] font-extrabold leading-[1.02] tracking-[-0.025em] reveal-text text-balance"
-          >
-            Not just a number. <span className="font-serif italic font-medium text-orange">A recommendation.</span>
-          </motion.h2>
-        </div>
+  const l = t.landing;
+  const [demoAmount, setDemoAmount] = useState(SAFE_AMOUNT);
+  const [whyOpen, setWhyOpen] = useState(false);
 
-        <div className="grid lg:grid-cols-[1fr_auto_1fr] gap-8 lg:gap-10 items-center mb-20">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {inputs.map((label, i) => (
-              <motion.div
-                key={label}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.5, delay: i * 0.1, ease: easeOut }}
-                className="card p-6"
-              >
-                <p className="text-[15px] font-semibold leading-snug reveal-text">{label}</p>
-              </motion.div>
-            ))}
+  // The demo slider is the visitor's selection; the headline recommendation is
+  // bounded by the existing safe amount, so the two never contradict each other.
+  const exceedsSafeAmount = demoAmount > SAFE_AMOUNT;
+  const recommendedAmount = exceedsSafeAmount ? SAFE_AMOUNT : demoAmount;
+  const percent = (demoAmount / SLIDER_MAX) * 100;
+
+  const factors = [
+    { icon: CalendarClock, label: l.aiRecommendationsUpcoming, value: -UPCOMING_7D },
+    { icon: BarChart3, label: l.aiRecommendationsRegular, value: REGULAR_SPENDING },
+    { icon: ShieldCheck, label: l.aiRecommendationsSafety, value: scenario.recommended, strong: true },
+  ];
+
+  return (
+    <section id="ai" className="bg-near-black py-16 text-cream sm:py-20 lg:py-24">
+      <div className="container-arqau">
+        <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+          <div className="max-w-[520px] lg:pt-3">
+            <motion.span {...fadeUp(0)} className="pill-badge mb-6 bg-orange/15 text-orange">
+              {l.aiRecommendationsEyebrow}
+            </motion.span>
+
+            <motion.h2
+              {...fadeUp(0.08)}
+              className="max-w-[12ch] text-[34px] font-extrabold leading-[1.08] tracking-normal text-white text-balance sm:text-[44px] lg:text-[48px]"
+            >
+              {l.aiRecommendationsTitleLead}
+              <span className="font-serif font-medium italic text-orange">{l.aiRecommendationsTitleHighlight}</span>
+              {l.aiRecommendationsTitleTail}
+            </motion.h2>
+
+            <motion.p
+              {...fadeUp(0.16)}
+              className="mt-5 max-w-[460px] text-[16px] leading-[1.7] text-white/65 sm:text-[17px]"
+            >
+              {l.aiRecommendationsSubtitle}
+            </motion.p>
+
+            <motion.a
+              {...fadeUp(0.24)}
+              href="#product"
+              className="btn-primary mt-7"
+            >
+              {l.aiRecommendationsCta} <ArrowRight size={17} className="btn-arrow" />
+            </motion.a>
           </div>
 
-          <div className="hidden lg:flex items-center justify-center text-[28px] text-ink-soft/30">→</div>
-
+          {/* right: calculator card */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.6, delay: 0.3, ease: easeOut }}
-            className="rounded-[26px] bg-orange text-cream p-9 sm:p-10 shadow-[0_28px_55px_-30px_rgba(47,83,56,0.55)]"
+            initial={{ opacity: 0, y: 32 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.65, ease: easeOut }}
+            className="border-y border-white/20 py-6 sm:py-8"
           >
-            <p className="text-[14px] font-semibold opacity-85 mb-3 reveal-text">{t.landing.recommendationTitle}</p>
-            <p className="text-[52px] sm:text-[60px] font-extrabold tracking-[-0.03em] mb-5 reveal-text">{formatTenge(scenario.recommended)}</p>
-            <p className="text-[13px] text-cream/80 mb-4 leading-relaxed reveal-text">
-              Keeps your upcoming expenses covered while protecting your reserve target.
-            </p>
-            <div className="flex justify-between text-[14px] pt-4 border-t border-cream/25 reveal-text">
-              <span className="opacity-80">{t.whatIf.available}</span>
-              <span className="font-semibold numbers">{formatTenge(scenario.available)}</span>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/15 pb-6">
+              <div>
+                <p className="text-[15px] font-semibold text-white/80">{l.aiRecommendationsRecommended}</p>
+                <p className="numbers mt-2 text-[38px] font-extrabold leading-none text-white sm:text-[44px]">
+                  {formatTenge(recommendedAmount)}
+                </p>
+                {exceedsSafeAmount && (
+                  <p className="mt-2 max-w-[300px] text-[12.5px] font-semibold leading-snug text-orange">
+                    {fill(l.aiRecommendationsAboveSafe, {
+                      selected: formatTenge(demoAmount),
+                      safe: formatTenge(SAFE_AMOUNT),
+                    })}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhyOpen((v) => !v)}
+                aria-expanded={whyOpen}
+                aria-controls="ai-why-answer"
+                className="flex items-center gap-2 border-b border-orange/50 py-2 text-[13px] font-bold text-orange transition-colors hover:border-orange focus-ring"
+              >
+                <HelpCircle size={14} />
+                {l.aiRecommendationsWhy}
+              </button>
             </div>
-            <div className="flex justify-between text-[14px] mt-2 reveal-text">
-              <span className="opacity-80">{t.whatIf.reserveTarget}</span>
-              <span className="font-semibold">{formatTenge(scenario.reserveTarget)}</span>
+
+            {whyOpen && (
+              <p
+                id="ai-why-answer"
+                className="mt-4 border-l-2 border-orange/60 pl-4 text-[13.5px] leading-relaxed text-white/70"
+              >
+                {l.aiRecommendationsWhyAnswer}
+              </p>
+            )}
+
+            {/* illustrative demo slider — clearly separated from the fixed recommendation */}
+            <div className="py-6">
+              <div className="mb-3 flex items-center justify-between text-[13px] font-semibold">
+                <span className="text-white/60">{l.aiRecommendationsSliderDemo}</span>
+                <span className="numbers text-orange">{formatTenge(demoAmount)}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={SLIDER_MAX}
+                step={5000}
+                value={demoAmount}
+                onChange={(e) => setDemoAmount(Number(e.target.value))}
+                aria-label={l.aiRecommendationsSliderDemo}
+                aria-valuetext={formatTenge(demoAmount)}
+                className="slider-orange"
+                style={{
+                  background: `linear-gradient(to right, var(--orange) 0%, var(--orange) ${percent}%, rgba(255,255,255,0.14) ${percent}%, rgba(255,255,255,0.14) 100%)`,
+                }}
+              />
+              <div className="mt-2 flex justify-between text-[12px] text-white/40">
+                <span className="numbers">0 ₸</span>
+                <span className="numbers">{formatTenge(SLIDER_MAX)}</span>
+              </div>
             </div>
-            <p className="mt-4 text-[11px] text-cream/50">Illustrative example</p>
+
+            <div className="border-t border-white/15 pt-6">
+              <p className="mb-4 text-[12px] font-bold uppercase tracking-[0.08em] text-white/45">
+                {l.aiRecommendationsKeyFactors}
+              </p>
+              <div className="divide-y divide-white/10">
+                {factors.map((f) => (
+                  <div
+                    key={f.label}
+                    className={`grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 py-3 ${f.strong ? "text-orange" : "text-white/85"}`}
+                  >
+                    <f.icon size={17} strokeWidth={1.8} className={f.strong ? "text-orange" : "text-white/50"} aria-hidden="true" />
+                    <p className="min-w-0 text-[13px] font-medium leading-snug sm:text-[14px]">{f.label}</p>
+                    <p className={`numbers text-right text-[13px] font-bold sm:text-[14px] ${f.strong ? "text-orange" : "text-white"}`}>
+                      {f.value < 0 ? "−" : ""}
+                      {formatTenge(Math.abs(f.value))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-5 max-w-[620px] text-[11.5px] leading-relaxed text-white/45">
+                {l.aiRecommendationsIllustrative}
+              </p>
+            </div>
           </motion.div>
         </div>
       </div>

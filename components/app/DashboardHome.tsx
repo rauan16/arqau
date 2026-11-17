@@ -5,13 +5,10 @@ import { ArrowUpRight, CalendarClock, ChevronRight, CircleAlert, CircleDollarSig
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "@/lib/language-context";
-import { api, FinanceSummary, EarnedWages, Transaction } from "@/lib/api";
+import { api, FinanceSummary, EWAResultResponse, Transaction } from "@/lib/api";
+import { formatMinorAsTenge } from "@/lib/money";
 
 const panel = "rounded-[16px] border border-ink/[0.07] bg-white/70 p-5 shadow-[0_18px_38px_-32px_rgba(22,20,18,0.5)]";
-
-function formatTenge(value: number) {
-  return value.toLocaleString("en-US");
-}
 
 function EmptyState({ title, description, actionLabel, actionHref }: { title: string; description: string; actionLabel?: string; actionHref?: string; }) {
   return (
@@ -29,9 +26,9 @@ function EmptyState({ title, description, actionLabel, actionHref }: { title: st
   );
 }
 
-function EarningsCard({ earned }: { earned: EarnedWages | null }) {
+function EarningsCard({ calculation }: { calculation: EWAResultResponse | null }) {
   const { t } = useTranslation();
-  if (!earned || earned.earned_amount_minor === 0) {
+  if (!calculation || calculation.earned_amount_minor === 0) {
     return (
       <EmptyState
         title={t.earnings.emptyTitle}
@@ -46,24 +43,24 @@ function EarningsCard({ earned }: { earned: EarnedWages | null }) {
     <section className={panel}>
       <div className="flex items-center gap-2 text-orange">
         <Wallet size={17} />
-        <p className="text-[12px] font-bold uppercase tracking-[0.1em]">{t.dashboard.earnedTitle}</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.1em]">{t.earnings.title}</p>
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-4">
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.earnedTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.earned_amount_minor)} ₸</p>
+      <div className="mt-6">
+        <p className="text-[13px] font-semibold text-ink-soft uppercase tracking-[0.05em] mb-2">{t.earnings.availableToWithdraw}</p>
+        <p className="text-[48px] font-extrabold tracking-tight text-orange numbers">{formatMinorAsTenge(calculation.available_amount_minor)}</p>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-ink/[0.06]">
+        <div className="flex flex-col items-center text-center p-3 rounded-[12px] bg-cream-soft">
+          <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-[0.05em]">{t.earnings.earnedThisPeriod}</p>
+          <p className="mt-1 text-[22px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.earned_amount_minor)}</p>
         </div>
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.accessedTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(earned.accessed_amount_minor)} ₸</p>
-        </div>
-        <div>
-          <p className="text-[12px] text-ink-soft">{t.dashboard.availableTitle}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange numbers">{formatTenge(earned.available_amount_minor)} ₸</p>
+        <div className="flex flex-col items-center text-center p-3 rounded-[12px] bg-cream-soft">
+          <p className="text-[11px] font-semibold text-ink-soft uppercase tracking-[0.05em]">{t.earnings.alreadyWithdrawn}</p>
+          <p className="mt-1 text-[22px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(calculation.paid_amount_minor)}</p>
         </div>
       </div>
-      <div className="mt-5 border-t border-ink/[0.06] pt-4">
-        <p className="text-[12px] text-ink-soft">{t.earnings.authoritativeNote}</p>
+      <div className="mt-4 pt-3 border-t border-ink/[0.06]">
+        <p className="text-[12px] text-ink-soft">{t.earnings.availableExplanation}</p>
       </div>
     </section>
   );
@@ -91,15 +88,15 @@ function SpendingCard({ summary }: { summary: FinanceSummary | null }) {
       <div className="mt-5 grid grid-cols-3 gap-4">
         <div>
           <p className="text-[12px] text-ink-soft">{t.expenses.income}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-green numbers">+{formatTenge(summary.total_income_minor)} ₸</p>
+          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-green numbers">+{formatMinorAsTenge(summary.total_income_minor)}</p>
         </div>
         <div>
           <p className="text-[12px] text-ink-soft">{t.expenses.expensesLabel}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange-dark numbers">-{formatTenge(summary.total_expense_minor)} ₸</p>
+          <p className="mt-1 text-[28px] font-extrabold tracking-tight text-orange-dark numbers">-{formatMinorAsTenge(summary.total_expense_minor)}</p>
         </div>
         <div>
           <p className="text-[12px] text-ink-soft">{t.expenses.netBalance}</p>
-          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatTenge(summary.net_balance_minor)} ₸</p>
+          <p className="mt-1 text-[28px] font-extrabold tracking-tight numbers">{formatMinorAsTenge(summary.net_balance_minor)}</p>
         </div>
       </div>
       <div className="mt-5 border-t border-ink/[0.06] pt-4">
@@ -109,9 +106,9 @@ function SpendingCard({ summary }: { summary: FinanceSummary | null }) {
   );
 }
 
-function InsightsCard({ earned }: { earned: EarnedWages | null }) {
+function InsightsCard({ calculation }: { calculation: EWAResultResponse | null }) {
   const { t } = useTranslation();
-  if (!earned || earned.available_amount_minor === 0) {
+  if (!calculation || calculation.available_amount_minor === 0) {
     return (
       <EmptyState
         title={t.dashboard.aiTitle}
@@ -147,18 +144,18 @@ export default function DashboardHome() {
   const { user } = useAuth();
   const { t } = useTranslation();
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
-  const [earned, setEarned] = useState<EarnedWages | null>(null);
+  const [calculation, setCalculation] = useState<EWAResultResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [summaryData, earnedData] = await Promise.all([
+        const [summaryData, calculationData] = await Promise.all([
           api.finance.getSummary(),
-          api.ewa.getEarned().catch(() => null),
+          api.ewa.getCalculation().catch(() => null),
         ]);
         setSummary(summaryData);
-        setEarned(earnedData);
+        setCalculation(calculationData);
       } catch {
       } finally {
         setLoading(false);
@@ -207,11 +204,11 @@ export default function DashboardHome() {
         </Link>
       </div>
 
-      <EarningsCard earned={earned} />
+      <EarningsCard calculation={calculation} />
 
       <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <SpendingCard summary={summary} />
-        <InsightsCard earned={earned} />
+        <InsightsCard calculation={calculation} />
       </div>
     </div>
   );

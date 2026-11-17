@@ -24,13 +24,13 @@ DEMO_SALARY = 187_400
 DEMO_EARNED = 212_800
 DEMO_AVAILABLE = 120_000
 DEMO_RESERVE_TARGET = 60_000
-DEMO_DAYS_TO_PAYDAY = 9
-DEMO_PAYDAY_DATE = "2026-09-16"
+DEMO_DAYS_TO_PAYDAY = 22
+DEMO_PAYDAY_DATE = "2026-10-16"
 
 DEMO_UPCOMING_BILLS: list[dict[str, Any]] = [
-    {"id": "rent", "amount": 45_000, "due_date": "2026-10-01", "is_paid": False},
-    {"id": "utilities", "amount": 9_000, "due_date": "2026-10-05", "is_paid": False},
-    {"id": "phone", "amount": 3_400, "due_date": "2026-10-07", "is_paid": False},
+    {"id": "rent", "amount": 45_000, "due_date": "2026-11-01", "is_paid": False},
+    {"id": "utilities", "amount": 9_000, "due_date": "2026-11-05", "is_paid": False},
+    {"id": "phone", "amount": 3_400, "due_date": "2026-11-07", "is_paid": False},
 ]
 
 DEMO_TRANSACTIONS: list[dict[str, Any]] = [
@@ -42,6 +42,13 @@ DEMO_TRANSACTIONS: list[dict[str, Any]] = [
     {"id": "seed-6", "type": "expense", "amount": 12_400, "category": "Food", "merchant": "City Market", "date": "2026-10-05"},
     {"id": "seed-7", "type": "expense", "amount": 6_500, "category": "Lifestyle", "merchant": "Streaming Plus", "date": "2026-10-07"},
     {"id": "seed-8", "type": "expense", "amount": 13_000, "category": "Health", "merchant": "Pharmacy", "date": "2026-10-09"},
+
+    # New period (16 Oct – 25 Oct demo snapshot)
+    {"id": "seed-21", "type": "income", "amount": 187_400, "category": "Salary", "merchant": "Employer payroll", "date": "2026-10-16", "description": "Salary"},
+    {"id": "seed-22", "type": "expense", "amount": 45_000, "category": "Housing", "merchant": "Home Rent", "date": "2026-10-17"},
+    {"id": "seed-23", "type": "expense", "amount": 22_000, "category": "Food", "merchant": "City Market", "date": "2026-10-20"},
+    {"id": "seed-24", "type": "expense", "amount": 14_000, "category": "Transport", "merchant": "Metro Pass", "date": "2026-10-24"},
+
     {"id": "seed-9", "type": "income", "amount": 187_400, "category": "Salary", "merchant": "Employer payroll", "date": "2026-08-17"},
     {"id": "seed-10", "type": "expense", "amount": 45_000, "category": "Housing", "merchant": "Home Rent", "date": "2026-08-18"},
     {"id": "seed-11", "type": "expense", "amount": 23_000, "category": "Food", "merchant": "City Market", "date": "2026-08-22"},
@@ -73,6 +80,28 @@ def _compute_current_period_totals() -> dict[str, int]:
             else:
                 expense += tx["amount"]
     return {"income": income, "expense": expense, "net": income - expense}
+
+
+def _compute_current_period_top_categories() -> list[dict[str, Any]]:
+    """Compute top spending categories for the current pay period only.
+    
+    Matches the same period boundaries and expense filtering as total_spending_minor.
+    Returns list sorted by amount descending, then category name, limited to 5.
+    """
+    period_start = DEMO_PAYDAY_DATE
+    cat_totals: dict[str, dict[str, int]] = {}
+    for tx in DEMO_TRANSACTIONS:
+        if tx["date"] >= period_start and tx["type"] == "expense":
+            cat = tx["category"]
+            if cat not in cat_totals:
+                cat_totals[cat] = {"amount": 0, "count": 0}
+            cat_totals[cat]["amount"] += tx["amount"]
+            cat_totals[cat]["count"] += 1
+    ordered = sorted(cat_totals.items(), key=lambda x: (-x[1]["amount"], x[0]))[:5]
+    return [
+        {"category": cat, "amount_minor": data["amount"] * 100, "transaction_count": data["count"]}
+        for cat, data in ordered
+    ]
 
 
 def _compute_upcoming_total() -> int:
@@ -225,18 +254,18 @@ def build_demo_sanitized_input(analysis: dict[str, Any] | None = None) -> dict[s
         "salary_amount_minor": ctx.salary_amount * 100,
         "currency": ctx.currency,
         "pay_period_start": ctx.payday_date,
-        "pay_period_end": "2026-10-15",
-        "calculation_date": ctx.data_as_of[:10],
+        "pay_period_end": "2026-11-16",
+        "calculation_date": "2026-10-25",
         "earned_amount_minor": ctx.earned_amount * 100,
         "policy_limit_minor": 0,
         "reserved_amount_minor": 0,
         "paid_amount_minor": 0,
-        "available_amount_minor": ctx.available_amount * 100,
-        "max_requestable_amount_minor": ctx.available_amount * 100,
+        "available_amount_minor": 0,
+        "max_requestable_amount_minor": 0,
         "minimum_withdrawal_minor": None,
         "maximum_withdrawal_minor": None,
-        "eligible": ctx.available_amount > 0,
-        "eligibility_reasons": [],
+        "eligible": False,
+        "eligibility_reasons": ["NO_EWA_POLICY"],
         "can_request_withdrawal": False,
         "withdrawals_this_period": 0,
         "max_withdrawals_per_period": None,
@@ -251,13 +280,7 @@ def build_demo_sanitized_input(analysis: dict[str, Any] | None = None) -> dict[s
         "transaction_count": 8,
         "essential_spending_minor": None,
         "discretionary_spending_minor": None,
-        "top_spending_categories": [
-            {"category": "Housing", "amount_minor": 45_000 * 100, "transaction_count": 1},
-            {"category": "Food", "amount_minor": (25_000 + 12_400) * 100, "transaction_count": 2},
-            {"category": "Transport", "amount_minor": 15_000 * 100, "transaction_count": 1},
-            {"category": "Health", "amount_minor": 13_000 * 100, "transaction_count": 1},
-            {"category": "Lifestyle", "amount_minor": 6_500 * 100, "transaction_count": 1},
-        ],
+        "top_spending_categories": _compute_current_period_top_categories(),
         "budget_available": False,
         "budget_total_minor": None,
         "budget_spent_minor": None,
@@ -272,7 +295,19 @@ def build_demo_sanitized_input(analysis: dict[str, Any] | None = None) -> dict[s
         "has_budget": False,
         "has_goals": False,
         "missing_data": [],
-        "availability_note": "available_amount_minor is deterministic remaining EWA capacity, not a recommended amount.",
+        "availability_note": (
+            "available_amount_minor is deterministic remaining EWA capacity in tiyin "
+            "(100 tiyin = 1 KZT). To express in KZT, divide by 100. "
+            "Not a recommended amount."
+        ),
+        "period_net_surplus_minor": ctx.reserve_saved * 100,
+        "reserve_target_minor": ctx.reserve_target * 100,
+        "reserve_shortfall_minor": ctx.reserve_remaining * 100,
+        "reserve_progress_ratio": ctx.reserve_progress,
+        "days_to_payday": ctx.days_to_payday,
+        "payday_date": ctx.payday_date,
+        "income_amount_minor": ctx.income_amount * 100,
+        "net_amount_minor": ctx.net_amount * 100,
     }
 
     if analysis is not None:

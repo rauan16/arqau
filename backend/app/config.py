@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 from urllib.parse import urlparse
 
 import os
@@ -132,6 +132,8 @@ class Settings(BaseModel):
     # Number of trusted proxy hops. 0 = disabled (default).
     # When > 0, X-Forwarded-For is parsed and the IP at position [-trusted_proxy_count] is used.
     trusted_proxy_count: int = 0
+    openai_max_tokens: int = 900
+    openai_base_url: Optional[str] = Field(default="", repr=False)
 
     @model_validator(mode="after")
     def validate_production_settings(self):
@@ -194,6 +196,7 @@ def get_settings() -> Settings:
         environment=environment,
         openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        openai_base_url=os.getenv("OPENAI_BASE_URL"),
         secret_key=(os.getenv("SECRET_KEY") or "").strip()
         or ("" if environment == "production" else DEFAULT_DEVELOPMENT_SECRET_KEY),
         algorithm=os.getenv("ALGORITHM", "HS256"),
@@ -205,4 +208,5 @@ def get_settings() -> Settings:
         jwt_issuer=os.getenv("JWT_ISSUER", "arqau"),
         jwt_audience=os.getenv("JWT_AUDIENCE", "arqau-api"),
         trusted_proxy_count=int(os.getenv("TRUSTED_PROXY_COUNT", "0")),
+        openai_max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "900")),
     )

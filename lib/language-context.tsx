@@ -16,16 +16,24 @@ const STORAGE_KEY = "arqau-locale";
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
 
+  // This client-only initialization avoids hydration mismatch while preserving the saved locale.
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "en" || stored === "ru") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocaleState(stored);
     }
   }, []);
 
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
   function setLocale(value: Locale) {
     setLocaleState(value);
-    localStorage.setItem(STORAGE_KEY, value);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, value);
+    }
   }
 
   return (

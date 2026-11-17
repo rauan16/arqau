@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import unittest
@@ -57,7 +57,6 @@ class ConfigurationTests(unittest.TestCase):
                 "DATABASE_URL": "postgresql+asyncpg://user:password@localhost/arqau",
                 "SECRET_KEY": "a" * MIN_SECRET_ENTROPY,
                 "OPENAI_API_KEY": "server-key",
-                "CORS_ORIGINS": "https://example.test",
             },
         ):
             settings = get_settings()
@@ -143,7 +142,6 @@ class ConfigurationTests(unittest.TestCase):
                 "DATABASE_URL": "postgresql+asyncpg://user:password@localhost/arqau",
                 "SECRET_KEY": valid_secret,
                 "OPENAI_API_KEY": "server-key",
-                "CORS_ORIGINS": "https://example.test",
             },
         ):
             settings = get_settings()
@@ -241,7 +239,6 @@ class ConfigurationTests(unittest.TestCase):
                 "DATABASE_URL": "postgresql+asyncpg://user:password@localhost/arqau",
                 "SECRET_KEY": "a" * MIN_SECRET_ENTROPY,
                 "OPENAI_API_KEY": "server-key",
-                "CORS_ORIGINS": "https://example.test",
                 "ACCESS_TOKEN_EXPIRE_MINUTES": "30",
             },
         ):
@@ -288,4 +285,3 @@ class ConfigurationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

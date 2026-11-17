@@ -85,6 +85,7 @@ export function WhatIfScreen() {
         <div className="flex justify-between text-[9px] text-ink-soft/60 mt-1">
           <span>0 ₸</span>
           <span>120,000 ₸</span>
+          <span className="text-[9px] text-ink-soft/80 ml-2">Illustrative demo value only.</span>
         </div>
       </div>
       <p className="text-[23px] font-extrabold leading-none mb-2 numbers">{formatTenge(result.amount)}</p>

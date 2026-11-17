@@ -1,240 +1,242 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowRight, Home, Utensils, Car, Lightbulb, SlidersHorizontal, ShieldCheck } from "lucide-react";
-import PhoneFrame from "./PhoneFrame";
-import HeroScreen from "./HeroScreen";
-import FloatingInsightCard from "./FloatingInsightCard";
-import { scenario, upcomingExpenses, weeklyEarnings, formatTenge } from "@/lib/demoData";
+import Image from "next/image";
+import { ArrowRight, ArrowUpRight, ChartColumnIncreasing, Sparkles, Target } from "lucide-react";
+import HeroInsightCard from "./HeroInsightCard";
+import { scenario, formatTenge } from "@/lib/demoData";
 import { useTranslation } from "@/lib/language-context";
 
-const easeOut = [0.22, 1, 0.36, 1] as const;
-const easeInOut = "easeInOut" as const;
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: (delay = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.75, delay, ease: easeOut },
-  }),
-};
-
-const floatY = (duration: number, delay: number) => ({
-  y: [0, -10, 0],
-  transition: {
-    duration,
-    delay,
-    repeat: Infinity,
-    ease: easeInOut,
-  },
-});
+function CardIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-soft text-orange">
+      {children}
+    </span>
+  );
+}
 
 export default function Hero() {
   const { t } = useTranslation();
-  const maxEarn = Math.max(...weeklyEarnings);
+  const h = t.landingHero;
 
   return (
-    <section id="top" className="relative min-h-[700px] lg:min-h-[800px] overflow-hidden pt-[120px] pb-20 lg:pt-[140px] lg:pb-28">
-      {/* organic orange field */}
-      <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 1.2, ease: "easeOut" }}
-              className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+    <section
+      id="top"
+      className="relative overflow-hidden bg-cream pb-14 pt-[84px] xl:min-h-[800px] xl:pb-16"
+    >
+      <div className="absolute inset-0" aria-hidden="true">
+        <Image
+          src="/hero-warm-workspace.jpg"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-[42%_58%] lg:object-center"
+        />
+        <div
+          className="absolute inset-0 bg-[linear-gradient(180deg,rgba(247,244,240,0.96)_0%,rgba(247,244,240,0.9)_26%,rgba(247,244,240,0.45)_52%,rgba(247,244,240,0.12)_68%,rgba(247,244,240,0.82)_100%)] lg:bg-[linear-gradient(100deg,rgba(247,244,240,0.94)_0%,rgba(247,244,240,0.78)_24%,rgba(247,244,240,0.3)_46%,rgba(247,244,240,0.08)_62%,rgba(247,244,240,0.14)_82%,rgba(247,244,240,0.4)_100%)]"
+        />
+        <div
+          className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,rgba(247,244,240,0)_0%,rgba(247,244,240,0.55)_100%)]"
+        />
+      </div>
+
+      <div className="relative z-10 mx-auto w-full max-w-[1400px] px-[5%]">
+        <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_1fr] lg:gap-8">
+          <div className="max-w-[640px] py-2 lg:max-w-[560px] xl:max-w-[640px] xl:py-[72px]">
+            <p
+              className="reveal-up flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.22em] text-ink-soft xl:text-[12px]"
+              style={{ animationDelay: "0.05s" }}
             >
-              <svg
-                className="hidden lg:block absolute -right-[8%] -top-[12%] w-[78%] h-[150%]"
-                viewBox="0 0 900 1000"
-                fill="none"
-                preserveAspectRatio="xMidYMid slice"
+              <span className="h-[1.5px] w-7 shrink-0 bg-orange" aria-hidden="true" />
+              {h.badge}
+            </p>
+
+            <h1
+              className="reveal-up mt-5 text-[clamp(2.5rem,5.6vw,5.2rem)] font-extrabold leading-[1.02] tracking-[-0.045em] text-ink"
+              style={{ animationDelay: "0.13s" }}
+            >
+              <span className="block">{h.titleLead}</span>
+              <span className="block">{h.titleTail}</span>
+              <span className="block font-serif text-[0.94em] text-orange italic tracking-[-0.02em]">
+                {h.titleHighlight}
+              </span>
+            </h1>
+
+            <p
+              className="reveal-up mt-6 max-w-[480px] text-[1.02rem] leading-[1.65] text-ink-soft md:text-[1.1rem]"
+              style={{ animationDelay: "0.23s" }}
+            >
+              {h.subtitle}
+            </p>
+
+            <div
+              className="reveal-up mt-8 flex flex-wrap items-center gap-x-7 gap-y-4"
+              style={{ animationDelay: "0.33s" }}
+            >
+              <a href="/signup" className="btn-primary focus-ring">
+                {h.ctaPrimary} <ArrowRight size={17} className="btn-arrow" aria-hidden="true" />
+              </a>
+              <a
+                href="/business/register"
+                className="group inline-flex items-center gap-2 text-[15.5px] font-bold text-ink underline decoration-orange decoration-2 underline-offset-[6px] transition-colors hover:text-orange-dark focus-ring"
               >
-                <path
-                  d="M900 0H320C420 90 300 190 210 260C90 350 20 470 60 620C100 770 260 830 400 900C520 960 700 1000 900 960V0Z"
-                  fill="url(#heroGradient)"
+                {h.ctaSecondary}
+                <ArrowUpRight
+                  size={16}
+                  className="text-orange transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  aria-hidden="true"
                 />
-                <defs>
-                  <linearGradient id="heroGradient" x1="900" y1="0" x2="200" y2="960" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#C65D2E" />
-                    <stop offset="1" stopColor="#A94720" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="lg:hidden absolute left-0 right-0 top-[48%] bottom-[-10%] rounded-t-[48%] bg-orange-2" />
-            </motion.div>
-
-      <div className="relative z-10 w-full max-w-[1480px] mx-auto px-6 lg:px-[72px]">
-        <div className="grid lg:grid-cols-[minmax(440px,1fr)_minmax(480px,1.1fr)] xl:grid-cols-[1fr_1.1fr] gap-10 lg:gap-12 xl:gap-16 items-start">
-          {/* left: copy */}
-          <div className="relative z-10 max-w-[520px]">
-            <motion.p variants={fadeUp} initial="hidden" animate="show" custom={0} className="eyebrow mb-6">
-              {t.landing.eyebrow}
-            </motion.p>
-
-            <motion.h1
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              custom={0.1}
-              className="text-[44px] sm:text-[60px] lg:text-[76px] xl:text-[84px] font-extrabold leading-[0.94] tracking-[-0.04em] text-ink text-balance"
-            >
-              Your money.
-              <br />
-              When you&apos;ve
-              <br />
-              <span className="font-serif italic font-medium text-orange">earned it.</span>
-            </motion.h1>
-
-            <motion.p
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              custom={0.22}
-              className="mt-8 text-[16px] sm:text-[17px] leading-[1.7] text-ink-soft max-w-[400px]"
-            >
-              {t.landing.heroSubtitleLanding}
-            </motion.p>
-
-            <motion.div
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              custom={0.32}
-              className="mt-10 flex flex-wrap items-center gap-4"
-            >
-              <a href="/signup" className="btn-primary">
-                {t.ctaPrimary} <ArrowRight size={16} className="btn-arrow" />
               </a>
-              <a href="#how-it-works" className="btn-secondary">
-                {t.ctaLearnMore}
-              </a>
-            </motion.div>
+            </div>
 
-            <motion.div
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              custom={0.45}
-              className="mt-20 hidden lg:flex items-center gap-3 text-[13px] text-ink-soft/60"
+            <p
+              className="reveal-up mt-9 text-[0.86rem] font-medium leading-relaxed text-ink-soft xl:mt-10 xl:text-[0.92rem]"
+              style={{ animationDelay: "0.41s" }}
             >
-              <span className="text-lg">↓</span> Scroll to explore
-            </motion.div>
+              {h.closingLine}
+            </p>
           </div>
 
-          {/* right: phone + floating cards */}
-          <div className="relative w-full min-h-[420px] sm:min-h-[520px] lg:min-h-[1040px] xl:min-h-[760px] flex items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{
-                opacity: { duration: 0.9, delay: 0.2, ease: easeOut },
-              }}
-              className="phone-float absolute left-1/2 -translate-x-1/2 top-0 z-10"
-            >
-              <PhoneFrame>
-                <HeroScreen />
-              </PhoneFrame>
-            </motion.div>
+          <div className="relative mx-auto grid w-full max-w-[600px] gap-4 lg:min-h-[600px] xl:mx-0 xl:max-w-none">
+            <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+              <svg
+                className="h-full w-full"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M50 18 C53 18 52 35 55 35"
+                  fill="none"
+                  stroke="#F26722"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeOpacity={0.55}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d="M60 47 C57 51 56 51 54 55"
+                  fill="none"
+                  stroke="#F26722"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeOpacity={0.55}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d="M14 68 C10 69 7 72 4 75"
+                  fill="none"
+                  stroke="#F26722"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeOpacity={0.55}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+              <span className="absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange ring-2 ring-white/90" style={{ left: "50%", top: "18%" }} />
+              <span className="absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange ring-2 ring-white/90" style={{ left: "55%", top: "35%" }} />
+              <span className="absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange ring-2 ring-white/90" style={{ left: "54%", top: "55%" }} />
+              <span className="absolute h-[7px] w-[7px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange ring-2 ring-white/90" style={{ left: "3.5%", top: "75.5%" }} />
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: [0, -10, 0] }}
-              transition={{ opacity: { duration: 0.6, delay: 0.55 }, ...floatY(5, 1.3).transition }}
-                className="hidden lg:block absolute z-20 left-0 top-[68%] w-[200px] xl:top-[12%] xl:-left-[80px] xl:w-[180px]"
+            <div
+              className="reveal-up order-1 lg:absolute lg:left-[6%] lg:top-[4%] lg:w-[190px] xl:left-[8%] xl:w-[250px]"
+              style={{ animationDelay: "0.3s" }}
             >
-              <FloatingInsightCard>
-                <p className="text-[11px] text-ink-soft mb-0.5">Your earnings</p>
-                <p className="text-[10px] text-ink-soft/70 mb-2">This month</p>
-                <p className="text-[19px] font-bold mb-2.5 numbers">{formatTenge(scenario.earned)}</p>
-                <div className="flex items-end gap-[3px] h-7">
-                  {weeklyEarnings.map((v, i) => (
-                    <div key={i} className="w-[7px] rounded-full bg-orange-2" style={{ height: `${(v / maxEarn) * 100}%` }} />
-                  ))}
-                </div>
-                <p className="mt-1.5 text-[9px] text-ink-soft/50">Illustrative example</p>
-              </FloatingInsightCard>
-            </motion.div>
+              <div className="hero-float" style={{ animationDelay: "0.9s" }}>
+                <HeroInsightCard>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <CardIcon>
+                        <Sparkles size={15} aria-hidden="true" />
+                      </CardIcon>
+                      <span className="text-[9px] font-extrabold uppercase leading-[1.35] tracking-[0.14em] text-orange-dark xl:text-[10px]">
+                        {h.cardOneLabel}
+                      </span>
+                    </div>
+                    <ArrowRight size={15} className="shrink-0 text-ink-soft" aria-hidden="true" />
+                  </div>
 
-<motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: [0, -9, 0] }}
-              transition={{ opacity: { duration: 0.6, delay: 0.7 }, ...floatY(5.8, 1.5).transition }}
-                className="hidden lg:block absolute z-20 left-0 top-[84%] w-[220px] xl:top-[51%] xl:-left-[80px] xl:w-[200px]"
-            >
-              <FloatingInsightCard>
-                <p className="text-[11px] text-ink-soft mb-2.5">Upcoming expenses</p>
-                <div className="space-y-1.5 mb-2.5">
-                  {upcomingExpenses.map((e) => {
-                    const Icon = e.label === "Rent" ? Home : e.label === "Food" ? Utensils : Car;
-                    return (
-                      <div key={e.label} className="flex items-center justify-between text-[11.5px]">
-                        <span className="flex items-center gap-1.5 text-ink-soft">
-                          <Icon size={12} /> {e.label}
-                        </span>
-                        <span className="font-semibold numbers">{formatTenge(e.amount)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="pt-2 border-t border-ink/[0.07] flex items-center justify-between text-[12px]">
-                  <span className="text-ink-soft">Total</span>
-                  <span className="font-bold numbers">{formatTenge(scenario.upcomingExpensesTotal)}</span>
-                </div>
-                <p className="mt-1.5 text-[9px] text-ink-soft/50">Illustrative example</p>
-              </FloatingInsightCard>
-            </motion.div>
+                  <p className="mt-3.5 text-[0.85rem] font-bold leading-[1.45] text-ink">
+                    {h.cardOneDescription}
+                  </p>
+                </HeroInsightCard>
+              </div>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: [0, -7, 0] }}
-              transition={{ opacity: { duration: 0.6, delay: 0.85 }, ...floatY(5.2, 1.7).transition }}
-                className="hidden lg:block absolute z-20 right-0 top-[68%] w-[230px] xl:top-[16%] xl:-right-[56px] xl:w-[180px]"
+            <div
+              className="reveal-up order-2 lg:absolute lg:left-[50%] lg:top-[20%] lg:w-[190px] xl:left-[55%] xl:w-[222px]"
+              style={{ animationDelay: "0.45s" }}
             >
-              <FloatingInsightCard className="bg-orange-soft border-orange/20">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Lightbulb size={13} className="text-orange" />
-                  <p className="text-[11px] font-semibold text-orange">ARQAU recommendation</p>
-                </div>
-                <p className="text-[12px] leading-snug text-ink-soft mb-2">
-                  ARQAU considers your earned income, upcoming expenses and reserve target before suggesting an amount.
-                </p>
-                <span className="text-[12px] font-semibold">→</span>
-              </FloatingInsightCard>
-            </motion.div>
+              <div className="hero-float" style={{ animationDelay: "1.8s" }}>
+                <HeroInsightCard>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <CardIcon>
+                        <ChartColumnIncreasing size={15} aria-hidden="true" />
+                      </CardIcon>
+                      <span className="text-[9px] font-extrabold uppercase leading-[1.35] tracking-[0.14em] text-orange-dark xl:text-[10px]">
+                        {h.cardTwoLabel}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-ink-soft">
+                      {h.cardTwoMeta}
+                    </span>
+                  </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: [0, -8, 0] }}
-              transition={{ opacity: { duration: 0.6, delay: 1 }, ...floatY(5.6, 1.9).transition }}
-                className="hidden lg:block absolute z-20 right-0 top-[84%] w-[210px] xl:top-[54%] xl:-right-[50px] xl:w-[170px]"
-            >
-              <FloatingInsightCard>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <SlidersHorizontal size={13} className="text-ink-soft" />
-                  <p className="text-[12px] font-semibold">What if?</p>
-                </div>
-                <p className="text-[11.5px] text-ink-soft leading-snug mb-2.5">
-                  Try different scenarios and see how they affect your balance.
-                </p>
-                <span className="text-[12px] font-semibold text-orange">Open simulator →</span>
-              </FloatingInsightCard>
-            </motion.div>
+                  <p className="numbers mt-3.5 text-[1.75rem] font-extrabold leading-none tracking-[-0.04em] text-ink xl:text-[1.9rem]">
+                    {formatTenge(scenario.earned)}
+                  </p>
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: [0, -6, 0] }}
-              transition={{ opacity: { duration: 0.6, delay: 1.1 }, ...floatY(4.8, 2.1).transition }}
-                className="hidden lg:block absolute z-20 left-1/2 -translate-x-1/2 bottom-0 w-[200px]"
+                  <svg
+                    className="mt-3.5 h-9 w-full"
+                    viewBox="0 0 200 40"
+                    fill="none"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M2 31 C 22 29, 38 24, 56 25 S 96 13, 122 15 S 166 7, 198 9"
+                      stroke="#F26722"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <circle cx={196} cy={9} r={3} fill="#F26722" />
+                  </svg>
+                </HeroInsightCard>
+              </div>
+            </div>
+
+            <div
+              className="reveal-up order-3 lg:absolute lg:left-[12%] lg:top-[54%] lg:w-[205px] xl:left-[14%] xl:w-[240px]"
+              style={{ animationDelay: "0.6s" }}
             >
-              <FloatingInsightCard>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <ShieldCheck size={13} className="text-orange" />
-                  <p className="text-[11px] font-semibold">Reserve target</p>
-                </div>
-                <p className="text-[10.5px] text-ink-soft mb-1">Amount ARQAU recommends keeping</p>
-                <p className="text-[18px] font-bold numbers">{formatTenge(scenario.reserveTarget)}</p>
-              </FloatingInsightCard>
-            </motion.div>
+              <div className="hero-float" style={{ animationDelay: "3.1s" }}>
+                <HeroInsightCard>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <CardIcon>
+                        <Target size={15} aria-hidden="true" />
+                      </CardIcon>
+                      <span className="text-[9px] font-extrabold uppercase leading-[1.35] tracking-[0.14em] text-orange-dark xl:text-[10px]">
+                        {h.cardThreeLabel}
+                      </span>
+                    </div>
+                    <ArrowRight size={15} className="shrink-0 text-orange" aria-hidden="true" />
+                  </div>
+
+                  <div className="mt-3.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                    <p className="numbers text-[1.75rem] font-extrabold leading-none tracking-[-0.04em] text-ink xl:text-[1.9rem]">
+                      {formatTenge(scenario.recommended)}
+                    </p>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-soft">
+                      {h.cardThreeMeta}
+                    </span>
+                  </div>
+                </HeroInsightCard>
+              </div>
+            </div>
           </div>
         </div>
       </div>

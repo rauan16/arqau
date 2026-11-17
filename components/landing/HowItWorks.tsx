@@ -1,83 +1,60 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Briefcase, Wallet, Receipt, ScanSearch, BadgeCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useTranslation } from "@/lib/language-context";
-
-const stages = [
-  { icon: Briefcase, title: "Your work", text: "Every shift and workday builds toward your salary." },
-  { icon: Wallet, title: "Earned income", text: "ARQAU tracks what you've already earned, in real time." },
-  { icon: Receipt, title: "Upcoming expenses", text: "Rent, food, transport — the costs already on their way." },
-  { icon: ScanSearch, title: "ARQAU analysis", text: "Earnings, expenses and your reserve, considered together." },
-  { icon: BadgeCheck, title: "Recommended withdrawal", text: "One clear number that keeps you covered." },
-];
-
-const easeOut = [0.22, 1, 0.36, 1] as const;
+import { fadeUp } from "@/lib/animations";
 
 export default function HowItWorks() {
   const { t } = useTranslation();
+  const l = t.landing;
+
+  const steps = [
+    { num: "01", title: l.step1Title, text: l.step1Text },
+    { num: "02", title: l.step2Title, text: l.step2Text },
+    { num: "03", title: l.step3Title, text: l.step3Text },
+  ];
+
   return (
-    <section id="how-it-works" className="py-28 lg:py-36 bg-cream">
+    <section id="how-it-works" className="bg-white py-16 sm:py-20 lg:py-24">
       <div className="container-arqau">
-        <div className="max-w-[680px] mb-16 lg:mb-24">
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: easeOut }}
-            className="eyebrow mb-5 reveal-text"
-          >
-            {t.landing.howItWorksTitle}
-          </motion.p>
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, ease: easeOut }}
-            className="text-[38px] sm:text-[48px] lg:text-[54px] font-extrabold leading-[1.04] tracking-[-0.02em] reveal-text text-balance"
-          >
-            {t.landing.howItWorksSubtitle}
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
-            className="mt-6 text-[18px] leading-[1.7] text-ink-soft reveal-text max-w-[560px]"
-          >
-            Work becomes earned income. Earned income becomes a clear, controlled decision.
-          </motion.p>
-        </div>
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+          <div className="max-w-[520px]">
+            <motion.span {...fadeUp(0)} className="pill-badge mb-6">
+              {l.howItWorksEyebrow}
+            </motion.span>
+            <motion.h2
+              {...fadeUp(0.08)}
+              className="max-w-[11ch] text-[34px] font-extrabold leading-[1.08] tracking-normal text-ink text-balance sm:text-[44px] lg:text-[48px]"
+            >
+              {l.howItWorksTitle}
+            </motion.h2>
+            <motion.p
+              {...fadeUp(0.16)}
+              className="mt-5 max-w-[440px] text-[16px] leading-[1.7] text-ink-soft sm:text-[17px]"
+            >
+              {l.howItWorksSubtitle}
+            </motion.p>
+          </div>
 
-        <div className="relative">
-          <div className="hidden lg:block absolute top-[26px] left-0 right-0 h-px bg-ink/[0.08]" />
-          <motion.div
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1.1, ease: easeOut }}
-            style={{ transformOrigin: "left" }}
-            className="hidden lg:block absolute top-[26px] left-0 right-0 h-px bg-orange"
-          />
+          <div>
+            <div className="grid gap-0 sm:grid-cols-3 sm:divide-x sm:divide-border">
+              {steps.map((s, i) => (
+                <motion.div
+                  key={s.num}
+                  {...fadeUp(0.1 + i * 0.08)}
+                  className="grid grid-cols-[40px_1fr] gap-x-4 border-t border-border py-5 sm:block sm:border-t-0 sm:px-5 sm:py-0 first:sm:pl-0 last:sm:pr-0"
+                >
+                  <span className="numbers row-span-2 font-serif text-[22px] italic leading-none text-orange sm:block">{s.num}</span>
+                  <h3 className="text-[17px] font-bold leading-snug text-ink sm:mt-5 sm:text-[18px]">{s.title}</h3>
+                  <p className="col-start-2 mt-1 text-[14px] leading-[1.65] text-ink-soft sm:mt-3 sm:text-[15px]">{s.text}</p>
+                </motion.div>
+              ))}
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-6">
-            {stages.map((s, i) => (
-              <motion.div
-                key={s.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.5, delay: i * 0.1, ease: easeOut }}
-                className="relative"
-              >
-                <div className="relative z-10 w-[58px] h-[58px] rounded-full bg-cream border border-ink/[0.1] flex items-center justify-center mb-5">
-                  <s.icon size={20} className="text-orange" strokeWidth={1.75} />
-                </div>
-                <p className="text-[11px] font-bold tracking-[0.12em] text-orange mb-3">0{i + 1}</p>
-                <h3 className="text-[18px] font-bold mb-2 reveal-text">{s.title}</h3>
-                <p className="text-[15px] leading-[1.7] text-ink-soft max-w-[240px] reveal-text">{s.text}</p>
-              </motion.div>
-            ))}
+            <motion.a {...fadeUp(0.35)} href="#product" className="btn-outline mt-8 w-fit">
+              {l.howItWorksCta} <ArrowRight size={16} className="btn-arrow" />
+            </motion.a>
           </div>
         </div>
       </div>
