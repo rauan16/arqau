@@ -930,7 +930,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
                      level === 2 ? "text-[18px] font-bold leading-[1.2]" :
                      level === 3 ? "text-[16px] font-semibold leading-relaxed" :
                                    "text-[14px] font-medium";
-      elements.push(<p key={i} className={hClass}>{text}</p>);
+      elements.push(<p key={i} className={hClass}>{renderBold(text)}</p>);
       i++;
       continue;
     }
@@ -945,7 +945,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
         listCount++;
         listItems.push(
           <li key={itemText.replace(/\s+/g, "-").replace(/[^\w-]/g, "") + listCount} className="text-[13px] leading-relaxed text-ink mb-1">
-            {itemText}
+            {renderBold(itemText)}
           </li>
         );
         i++;
@@ -975,7 +975,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
         // Use the item text as part of the key for stability
         listItems.push(
           <li key={itemText.replace(/\s+/g, "-").replace(/[^\w-]/g, "") + currentNum} className="text-[13px] leading-relaxed text-ink mb-1">
-            {itemText}
+            {renderBold(itemText)}
           </li>
         );
         i++;
@@ -990,7 +990,7 @@ const renderMarkdown = (text: string): React.ReactNode => {
     }
 
     // Default: paragraph
-    elements.push(<p key={i} className="text-[13px] leading-relaxed text-ink">{line}</p>);
+    elements.push(<p key={i} className="text-[13px] leading-relaxed text-ink">{renderBold(line)}</p>);
     i++;
   }
 
