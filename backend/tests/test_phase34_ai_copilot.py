@@ -1462,6 +1462,20 @@ class TestP351_CopilotProviderPolicy(unittest.IsolatedAsyncioTestCase):
         client = provider._get_client()
         self.assertEqual(str(client.base_url), "https://openrouter.ai/api/v1/")
 
+    def test_P5a_free_ling_model_keeps_json_schema_output_enabled(self) -> None:
+        provider = OpenAICopilotProvider(
+            api_key="sk-or-test",
+            model="inclusionai/ling-3.2-flash:free",
+        )
+        self.assertTrue(provider._supports_structured_output)
+
+    def test_P5b_unverified_free_models_do_not_assume_json_schema_support(self) -> None:
+        provider = OpenAICopilotProvider(
+            api_key="sk-or-test",
+            model="some-model:free",
+        )
+        self.assertFalse(provider._supports_structured_output)
+
     def test_P5_copilot_timeout_constant_is_structured(self) -> None:
         self.assertIsInstance(COPILOT_TIMEOUT, httpx.Timeout)
         self.assertEqual(COPILOT_TIMEOUT.connect, 5.0)

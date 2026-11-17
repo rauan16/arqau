@@ -569,8 +569,15 @@ class OpenAICopilotProvider(CopilotProvider):
 
     @property
     def _supports_structured_output(self) -> bool:
-        """Free models on OpenRouter typically don't support json_schema."""
-        return bool(self._model) and not self._model.endswith(":free")
+        """Whether the configured model supports the JSON Schema output we require.
+
+        Most free OpenRouter variants do not expose json_schema, but Ling 3.2
+        Flash is a documented exception and is used by the no-credit demo tier.
+        """
+        return bool(self._model) and (
+            not self._model.endswith(":free")
+            or self._model == "inclusionai/ling-3.2-flash:free"
+        )
 
     async def generate_copilot(
         self, payload: dict[str, Any], user_message: str
