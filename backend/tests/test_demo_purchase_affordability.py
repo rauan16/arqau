@@ -195,5 +195,31 @@ class DemoPurchaseAffordabilityChatTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("EWA", response.response)
 
 
+class DemoFinancialOverviewFallbackTests(unittest.TestCase):
+    def test_reserve_summary_reports_amount_above_target_not_capped_percentage(self) -> None:
+        for locale in ("en", "ru"):
+            with self.subTest(locale=locale):
+                response = _build_demo_fallback_answer(
+                    _build_demo_authoritative_facts(locale),
+                    locale,
+                    FALLBACK_NOT_CONFIGURED,
+                )
+
+                self.assertNotIn("100%", response.response)
+                if locale == "en":
+                    self.assertIn("surplus exceeds the target by 71800 KZT", response.response)
+                    self.assertIn("the calculated remainder is 74400 KZT", response.response)
+                    self.assertIn("planning headroom is 14400 KZT", response.response)
+                else:
+                    self.assertIn("остаток превышает целевой резерв на 71800 ₸", response.response)
+                    self.assertIn("расчетный остаток составляет 74400 ₸", response.response)
+                    self.assertIn("планируемый запас составляет 14400 ₸", response.response)
+
+                self.assertIn(
+                    "Reserve-target coverage is calculated from period surplus, not confirmed savings.",
+                    response.data_limitations,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
