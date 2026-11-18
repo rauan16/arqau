@@ -294,16 +294,16 @@ def _is_available_funds_question(message: str) -> bool:
     Keep this separate from EWA withdrawal intent: a generic available-money
     question must not be answered with an EWA limit or a broad financial report.
     """
-    normalized = re.sub(r"\\s+", " ", (message or "").strip().lower())
+    normalized = re.sub(r"\s+", " ", (message or "").strip().lower())
     patterns = (
-        r"\\bhow much (?:money|cash|funds) do i have available\\b",
-        r"\\bhow much (?:money|cash|funds) (?:is )?available\\b",
-        r"\\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\\b",
-        r"\\bwhat(?:'s| is) my available (?:balance|funds|cash)\\b",
-        r"\\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\\b",
-        r"\\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\\b",
-        r"\\bкакой у меня доступный (?:баланс|остаток)\\b",
-        r"\\bкакой доступный (?:баланс|остаток)\\b",
+        r"\bhow much (?:money|cash|funds) do i have available\\b",
+        r"\bhow much (?:money|cash|funds) (?:is )?available\\b",
+        r"\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\\b",
+        r"\bwhat(?:'s| is) my available (?:balance|funds|cash)\\b",
+        r"\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\\b",
+        r"\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\\b",
+        r"\bкакой у меня доступный (?:баланс|остаток)\\b",
+        r"\bкакой доступный (?:баланс|остаток)\\b",
     )
     return any(re.search(pattern, normalized) for pattern in patterns)
 
