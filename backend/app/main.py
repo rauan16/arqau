@@ -24,6 +24,7 @@ settings = get_settings()
 # commits, so browser requests keep passing CORS after each preview deploy.
 PREVIEW_CORS_ORIGINS = (
     "https://arqau-git-release-v10-demo-rauanserikov77-9300s-projects.vercel.app",
+    "https://arqau-cnw17slq4-rauanserikov77-9300s-projects.vercel.app",
 )
 allowed_cors_origins = list(dict.fromkeys([
     *settings.cors_origins_list,
