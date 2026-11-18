@@ -16,7 +16,9 @@ from app.services.ai_copilot import (
     FALLBACK_NOT_CONFIGURED,
     FakeCopilotProvider,
     authoritative_numeric_values,
+    extract_hypothetical_amount_minor,
     find_unsupported_amount,
+    is_purchase_affordability_question,
     sanitize_provider_payload,
 )
 from app.services.demo_financial_context import (
@@ -26,6 +28,37 @@ from app.services.demo_financial_context import (
 
 
 class DemoPurchaseAffordabilityCalculationTests(unittest.TestCase):
+    def test_general_financial_questions_are_not_misclassified_as_purchases(self) -> None:
+        self.assertFalse(
+            is_purchase_affordability_question(
+                "What do I spend the most money on?"
+            )
+        )
+        self.assertFalse(
+            is_purchase_affordability_question(
+                "How much have I earned this month?"
+            )
+        )
+        self.assertTrue(
+            is_purchase_affordability_question(
+                "How much can I spend right now?"
+            )
+        )
+
+    def test_spend_amount_is_extracted_for_remaining_balance_scenario(self) -> None:
+        self.assertEqual(
+            extract_hypothetical_amount_minor(
+                "How much will I have left if I spend 10,000 KZT?"
+            ),
+            1_000_000,
+        )
+        self.assertEqual(
+            extract_hypothetical_amount_minor(
+                "Сколько останется, если я потрачу 10 000 ₸?"
+            ),
+            1_000_000,
+        )
+
     def test_macbook_price_uses_period_flow_bills_and_reserve(self) -> None:
         result = evaluate_demo_purchase_affordability(50_000_000)
 

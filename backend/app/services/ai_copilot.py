@@ -1146,6 +1146,8 @@ _NON_HYPOTHETICAL_MARKERS = (
 # Includes withdrawal contexts and purchase/affordability contexts.
 _AMOUNT_CONTEXT_RE = re.compile(
     r"(?:[\u20b8$\u20ac\u00a3]\s*"
+    r"|spend(?:ing)?\s+"
+    r"|потрат\w*\s+"
     r"|amount\s+of\s+"
     r"|amount\s+"
     r"|withdraw(?:al|als)?\s+of\s+"
@@ -1181,9 +1183,23 @@ def _looks_withdrawal_specific(message: str) -> bool:
     return any(keyword in lowered for keyword in _WITHDRAWAL_KEYWORDS)
 
 
+_SPENDING_CATEGORY_QUESTION_MARKERS = (
+    "what do i spend the most",
+    "what do i spend most",
+    "where do i spend the most",
+    "what do i spend my money on",
+    "what are my biggest expenses",
+    "what are my top spending categories",
+    "на что я трачу больше всего",
+    "куда у меня уходит больше всего",
+)
+
+
 def _looks_purchase_affordability_specific(message: str) -> bool:
     lowered = (message or "").lower()
     if any(marker in lowered for marker in _NON_HYPOTHETICAL_MARKERS):
+        return False
+    if any(marker in lowered for marker in _SPENDING_CATEGORY_QUESTION_MARKERS):
         return False
     return any(keyword in lowered for keyword in _PURCHASE_AFFORDABILITY_KEYWORDS)
 
