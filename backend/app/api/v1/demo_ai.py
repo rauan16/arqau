@@ -17,6 +17,7 @@ never touches authenticated user data.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import re
 import hashlib
 import secrets
@@ -58,6 +59,7 @@ from app.services.demo_financial_context import (
     build_demo_financial_context,
     build_demo_sanitized_input,
     evaluate_demo_affordability,
+    evaluate_demo_purchase_affordability,
 )
 from app.schemas.ai import ChatRequest
 from app.schemas.ai_copilot import (
@@ -193,6 +195,8 @@ def _build_demo_authoritative_facts(
         period_net_surplus_minor=ctx.reserve_saved * 100,
         reserve_shortfall_minor=ctx.reserve_remaining * 100,
         reserve_progress_ratio=ctx.reserve_progress,
+        upcoming_bills_total_minor=ctx.upcoming_bills_total * 100,
+        upcoming_bills_unpaid_minor=ctx.upcoming_bills_unpaid_total * 100,
         eligible=False,
         eligibility_reasons=["NO_EWA_POLICY"],
         can_request_withdrawal=False,
@@ -278,13 +282,169 @@ def _build_demo_affordability_analysis(
     )
 
 
+def _format_demo_purchase_money(amount_minor: int, locale: str) -> str:
+    amount = amount_minor // 100
+    formatted = f"{amount:,}"
+    return formatted.replace(",", " ") if locale == "ru" else formatted
+
+
+def _build_demo_purchase_fallback_answer(
+    locale: str,
+    fallback_reason: str,
+    purchase_analysis: dict[str, Any],
+) -> CopilotAnswer:
+    """Build a direct deterministic answer from the server-side purchase calculation."""
+    fmt = lambda key: _format_demo_purchase_money(int(purchase_analysis[key]), locale)
+
+    purchase_minor = purchase_analysis.get("purchase_amount_minor")
+    surplus = fmt("period_surplus_minor")
+    bills = fmt("upcoming_bills_unpaid_minor")
+    after_bills = fmt("amount_after_bills_minor")
+    reserve = fmt("reserve_target_minor")
+    headroom = fmt("purchase_headroom_minor")
+
+    if purchase_minor is None:
+        if locale == "ru":
+            lead = (
+                f"По денежному потоку демо-профиля на покупку остается до **{headroom} ₸** "
+                "после учета обязательных платежей и целевого резерва."
+            )
+            detail = (
+                f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                f"на **{bills} ₸** остается **{after_bills} ₸**; целевой резерв — "
+                f"**{reserve} ₸**."
+            )
+            follow_up = "Для оценки конкретной покупки нужна ее цена."
+            limitation = (
+                "Это оценка по денежному потоку, а не подтвержденные деньги на счете. "
+                "Фактический банковский баланс и накопления неизвестны."
+            )
+            fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+        else:
+            lead = (
+                f"The demo profile leaves up to **{headroom} KZT** for a purchase "
+                "after upcoming bills and the reserve target are accounted for."
+            )
+            detail = (
+                f"The period-surplus indicator is **{surplus} KZT**. After "
+                f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains "
+                f"before preserving the **{reserve} KZT** reserve target."
+            )
+            follow_up = "Share the purchase price to assess that specific item."
+            limitation = (
+                "This is a period-flow estimate, not confirmed cash in your account. "
+                "Your actual bank balance and savings are unknown."
+            )
+            fallback_note = (
+                "This is the server-calculated estimate; the AI explanation is currently unavailable."
+            )
+        response = "\n\n".join((lead, detail, follow_up, fallback_note))
+    else:
+        purchase = _format_demo_purchase_money(int(purchase_minor), locale)
+        shortfall = fmt("shortfall_minor")
+        if locale == "ru":
+            lead = (
+                f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
+                "не укладывается в запас после оплаты предстоящих счетов и сохранения резерва."
+            )
+            detail = (
+                f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                f"на **{bills} ₸** остается **{after_bills} ₸**. Если сохранить "
+                f"целевой резерв **{reserve} ₸**, на покупку остается до **{headroom} ₸**."
+            )
+            gap = (
+                f"Покупка превышает этот запас на **{shortfall} ₸**. "
+                "Это оценка демо-денежного потока, а не проверка банковского счета."
+            )
+            limitation = (
+                "Фактический баланс и накопления на банковском счете неизвестны. "
+                "Отдельные сбережения, не отраженные в демо-профиле, могут изменить вывод."
+            )
+            fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+        else:
+            lead = (
+                f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
+                "purchase does not fit while covering upcoming bills and preserving the reserve."
+            )
+            detail = (
+                f"The period-surplus indicator is **{surplus} KZT**. After "
+                f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains. "
+                f"Preserving the **{reserve} KZT** reserve target leaves up to "
+                f"**{headroom} KZT** for the purchase."
+            )
+            gap = (
+                f"The purchase exceeds that buffer by **{shortfall} KZT**. "
+                "This is a demo cash-flow estimate, not a check of your bank account."
+            )
+            limitation = (
+                "The actual bank balance and savings are unknown. Separate savings "
+                "not represented in the demo profile could change the conclusion."
+            )
+            fallback_note = (
+                "This is the server-calculated estimate; the AI explanation is currently unavailable."
+            )
+        response = "\n\n".join((lead, detail, gap, fallback_note))
+
+    return CopilotAnswer(
+        response=response,
+        key_facts=[
+            CopilotFact(
+                code="surplus_summary",
+                text=(
+                    f"Показатель остатка периода: {surplus} ₸."
+                    if locale == "ru"
+                    else f"Period-surplus indicator: {surplus} KZT."
+                ),
+            ),
+            CopilotFact(
+                code="upcoming_bills",
+                text=(
+                    f"Неоплаченные обязательные платежи: {bills} ₸."
+                    if locale == "ru"
+                    else f"Unpaid upcoming bills: {bills} KZT."
+                ),
+            ),
+            CopilotFact(
+                code="reserve_target",
+                text=(
+                    f"Целевой резерв: {reserve} ₸."
+                    if locale == "ru"
+                    else f"Reserve target: {reserve} KZT."
+                ),
+            ),
+        ],
+        data_limitations=[limitation],
+        suggested_questions=(
+            DEFAULT_SUGGESTED_QUESTIONS_RU
+            if locale == "ru"
+            else DEFAULT_SUGGESTED_QUESTIONS_EN
+        ),
+        disclaimer=(
+            DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
+        ),
+        ai_metadata=CopilotMetadata(
+            generated=False,
+            fallback_used=True,
+            provider=None,
+            model=None,
+            fallback_reason=fallback_reason,
+        ),
+    )
+
+
 def _build_demo_fallback_answer(
     facts: Optional[AuthoritativeCopilotFacts],
     locale: str,
     fallback_reason: str,
     analysis: Optional[WithdrawalAnalysis] = None,
+    purchase_analysis: Optional[dict[str, Any]] = None,
 ) -> CopilotAnswer:
     """Build a deterministic fallback answer when the provider is unavailable."""
+    if purchase_analysis is not None:
+        return _build_demo_purchase_fallback_answer(
+            locale, fallback_reason, purchase_analysis
+        )
+
     disclaimer = DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
     ctx = build_demo_financial_context()
 
@@ -520,17 +680,21 @@ async def demo_chat_endpoint(
     # Build authoritative facts from trusted server-side demo context.
     facts = _build_demo_authoritative_facts(locale)
 
-    # Optionally analyse a hypothetical withdrawal/purchase amount.
+    # Withdrawal and purchase affordability are separate server-side scenarios.
     analysis: Optional[WithdrawalAnalysis] = None
+    purchase_analysis: Optional[dict[str, Any]] = None
     amount_minor = extract_hypothetical_amount_minor(message)
     purchase_affordability_question = is_purchase_affordability_question(message)
-    # The EWA withdrawal evaluator is only for wage-access questions. A product
-    # purchase is a separate scenario: do not treat the EWA limit as cash.
+
     if amount_minor is not None and is_withdrawal_question(message):
         ctx = build_demo_financial_context()
         affordability = evaluate_demo_affordability(amount_minor // 100)
         analysis = _build_demo_affordability_analysis(amount_minor // 100, affordability, ctx)
         facts = _build_demo_authoritative_facts(locale, analysis=analysis)
+    elif purchase_affordability_question and not is_withdrawal_question(message):
+        purchase_analysis = asdict(
+            evaluate_demo_purchase_affordability(amount_minor)
+        )
 
     # Direct affordability questions with a supplied price do not need mock
     # catalogue offers. Keep product lookup for explicit shopping searches.
@@ -570,6 +734,7 @@ async def demo_chat_endpoint(
             "share_of_earned": (analysis.impact.requested_share_of_earned_bps or 0) / 10000 if analysis else 0,
             "status": "comfortable" if analysis and analysis.requestability.requestable else "caution",
         } if analysis else None,
+        purchase_analysis=purchase_analysis,
     )
     # Add product search results if available (not part of analysis)
     if product_search_results:
@@ -587,6 +752,7 @@ async def demo_chat_endpoint(
         user_message=message,
         user_id=DEMO_USER_ID,
         analysis=analysis,
+        purchase_analysis=purchase_analysis,
     )
 
     # Override locale-specific fields that `generate_copilot_answer` sets to
@@ -596,7 +762,13 @@ async def demo_chat_endpoint(
 
     # Build a locale-aware fallback answer when the provider was unavailable.
     if answer.ai_metadata.fallback_used:
-        fallback_answer = _build_demo_fallback_answer(facts, locale, answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR, analysis)
+        fallback_answer = _build_demo_fallback_answer(
+            facts,
+            locale,
+            answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR,
+            analysis,
+            purchase_analysis,
+        )
         # Preserve provider/model attribution from the answer.
         fallback_answer.ai_metadata.provider = answer.ai_metadata.provider
         fallback_answer.ai_metadata.model = answer.ai_metadata.model

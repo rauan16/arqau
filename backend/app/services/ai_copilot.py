@@ -237,6 +237,18 @@ Never present an unsupported affordability estimate as a confirmed fact.
 
 For purchases, never treat available EWA capacity as cash, a bank balance, or confirmed savings. Do not judge affordability by comparing the purchase price with the EWA limit alone. Use known income, recorded expenses, upcoming bills, reserve targets, and actual savings only when they are explicitly available.
 
+### Server-calculated purchase scenarios
+
+When `<server_facts>` contains `purchase_analysis`, it is the authoritative server calculation for the price in the user's question. All monetary values are in minor units (100 tiyin = 1 KZT). Use the supplied values and do not recalculate them or substitute EWA availability.
+
+- Start with a direct, qualified answer about whether the purchase fits the calculated period-flow buffer.
+- Explain period surplus, unpaid upcoming bills, amount remaining after bills, reserve target, purchase headroom and shortfall only as relevant.
+- If `purchase_amount_minor` is null, the user did not provide a price. Do not invent one or give a yes/no verdict about a specific item. State the available purchase headroom and ask for the price only when needed.
+- `bank_balance_confirmed: false` means actual cash and bank savings are unknown. Say that separate savings not represented in the demo profile could change the real-world conclusion.
+- Never describe period surplus or purchase headroom as a confirmed bank balance or cash on hand.
+- Do not mention EWA policy, EWA capacity or withdrawal limits unless the user explicitly asks about EWA.
+- Never claim a purchase is categorically impossible when actual bank savings are unknown.
+
 ## 6. HYPOTHETICAL FINANCIAL SCENARIOS
 
 Users may provide their own numbers and ask you to analyze hypothetical situations.
@@ -853,6 +865,9 @@ _ALLOWED_INPUT_FIELDS = (
     "payday_date",
     "income_amount_minor",
     "net_amount_minor",
+    "upcoming_bills_total_minor",
+    "upcoming_bills_unpaid_minor",
+    "purchase_analysis",
     "analyzed_withdrawal_amount_minor",
     "analyzed_withdrawal_requestable",
     "analyzed_withdrawal_blocking_reasons",
@@ -1344,6 +1359,7 @@ def contains_fabricated_policy_claim(*texts: Optional[str]) -> Optional[str]:
 def authoritative_numeric_values(
     facts: AuthoritativeCopilotFacts,
     analysis: Optional[WithdrawalAnalysis] = None,
+    additional_facts: Optional[dict[str, Any]] = None,
 ) -> set[int]:
     """Every integer the backend owns, as absolute values.
 
@@ -1367,6 +1383,8 @@ def authoritative_numeric_values(
     collect(facts.model_dump())
     if analysis is not None:
         collect(analysis.model_dump())
+    if additional_facts is not None:
+        collect(additional_facts)
     return values
 
 
@@ -1705,6 +1723,7 @@ async def generate_copilot_answer(
     user_message: str,
     user_id: str,
     analysis: Optional[WithdrawalAnalysis] = None,
+    purchase_analysis: Optional[dict[str, Any]] = None,
 ) -> CopilotAnswer:
     """Run the provider, validate its output, and fall back deterministically.
 
@@ -1882,7 +1901,9 @@ async def generate_copilot_answer(
     # monetary figure the backend does not own, nor manufacture policy/pricing
     # terms. Both would let the AI contradict authoritative facts indirectly
     # through prose rather than through a field it could overwrite.
-    allowed_values = authoritative_numeric_values(facts, analysis)
+    allowed_values = authoritative_numeric_values(
+        facts, analysis, additional_facts=purchase_analysis
+    )
     for text in visible_texts:
         unsupported = find_unsupported_amount(text, allowed_values)
         if unsupported is not None:

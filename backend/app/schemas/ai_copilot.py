@@ -129,6 +129,8 @@ class AuthoritativeCopilotFacts(BaseModel):
     period_net_surplus_minor: Optional[int] = None
     reserve_shortfall_minor: Optional[int] = None
     reserve_progress_ratio: Optional[float] = None
+    upcoming_bills_total_minor: Optional[int] = None
+    upcoming_bills_unpaid_minor: Optional[int] = None
 
     eligible: Optional[bool] = None
     eligibility_reasons: list[str] = Field(default_factory=list)

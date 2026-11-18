@@ -238,11 +238,84 @@ def evaluate_demo_affordability(amount: int) -> DemoAffordabilityResult:
     )
 
 
+@dataclass(frozen=True)
+class DemoPurchaseAffordabilityResult:
+    """Server-calculated purchase headroom from period flow, bills and reserve.
+
+    All monetary values are integer minor units (tiyin). This estimate does
+    not imply that the period surplus is held as cash or bank savings.
+    """
+
+    purchase_amount_minor: int | None
+    period_surplus_minor: int
+    upcoming_bills_unpaid_minor: int
+    amount_after_bills_minor: int
+    reserve_target_minor: int
+    purchase_headroom_minor: int
+    shortfall_minor: int | None
+    remaining_after_purchase_and_bills_minor: int | None
+    fits_period_buffer: bool | None
+    bank_balance_confirmed: bool = False
+
+
+def evaluate_demo_purchase_affordability(
+    purchase_amount_minor: int | None = None,
+) -> DemoPurchaseAffordabilityResult:
+    """Evaluate a purchase without treating EWA capacity as spendable cash.
+
+    When no price is supplied, return the available period-flow headroom so
+    the assistant can answer budget questions without inventing a price.
+    """
+    if purchase_amount_minor is not None and (
+        isinstance(purchase_amount_minor, bool)
+        or not isinstance(purchase_amount_minor, int)
+        or purchase_amount_minor <= 0
+    ):
+        raise ValueError("purchase_amount_minor must be a positive integer or None")
+
+    ctx = build_demo_financial_context()
+    period_surplus_minor = ctx.reserve_saved * 100
+    upcoming_bills_unpaid_minor = ctx.upcoming_bills_unpaid_total * 100
+    amount_after_bills_minor = period_surplus_minor - upcoming_bills_unpaid_minor
+    reserve_target_minor = ctx.reserve_target * 100
+    purchase_headroom_minor = max(0, amount_after_bills_minor - reserve_target_minor)
+
+    shortfall_minor = (
+        max(0, purchase_amount_minor - purchase_headroom_minor)
+        if purchase_amount_minor is not None
+        else None
+    )
+
+    return DemoPurchaseAffordabilityResult(
+        purchase_amount_minor=purchase_amount_minor,
+        period_surplus_minor=period_surplus_minor,
+        upcoming_bills_unpaid_minor=upcoming_bills_unpaid_minor,
+        amount_after_bills_minor=amount_after_bills_minor,
+        reserve_target_minor=reserve_target_minor,
+        purchase_headroom_minor=purchase_headroom_minor,
+        shortfall_minor=shortfall_minor,
+        remaining_after_purchase_and_bills_minor=(
+            amount_after_bills_minor - purchase_amount_minor
+            if purchase_amount_minor is not None
+            else None
+        ),
+        fits_period_buffer=(
+            purchase_amount_minor <= purchase_headroom_minor
+            if purchase_amount_minor is not None
+            else None
+        ),
+        bank_balance_confirmed=False,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Sanitized provider input (allow-list, server-owned facts only)
 # ---------------------------------------------------------------------------
 
-def build_demo_sanitized_input(analysis: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_demo_sanitized_input(
+    analysis: dict[str, Any] | None = None,
+    purchase_analysis: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build the minimal allow-listed provider payload from demo context.
 
     Never accepts caller-supplied financial values. All numbers come from
@@ -308,7 +381,12 @@ def build_demo_sanitized_input(analysis: dict[str, Any] | None = None) -> dict[s
         "payday_date": ctx.payday_date,
         "income_amount_minor": ctx.income_amount * 100,
         "net_amount_minor": ctx.net_amount * 100,
+        "upcoming_bills_total_minor": ctx.upcoming_bills_total * 100,
+        "upcoming_bills_unpaid_minor": ctx.upcoming_bills_unpaid_total * 100,
     }
+
+    if purchase_analysis is not None:
+        raw["purchase_analysis"] = purchase_analysis
 
     if analysis is not None:
         raw.update({
