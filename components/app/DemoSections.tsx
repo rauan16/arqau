@@ -1176,51 +1176,27 @@ addMessage({
       )}
 
       {messages.length === 0 && (
-        <>
-          <section className={panel}>
-            <div className="space-y-4">
-              <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.emptyChatTitle}</h2>
-              <p className="text-[14px] leading-relaxed text-ink-soft">{ai.emptyChatBody}</p>
-              <div className="mt-5 space-y-2">
-                <p className="text-[12px] font-semibold text-ink-soft">{ai.suggestedQuestions}</p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedQuestions.map((q) => (
-                    <button
-                      key={q.key}
-                      type="button"
-                      onClick={() => handleSuggestedQuestion(q.text)}
-                      className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
-                    >
-                      {q.text}
-                    </button>
-                  ))}
-                </div>
+        <section className={panel}>
+          <div className="space-y-4">
+            <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.contextQuestionsTitle}</h2>
+            <p className="text-[14px] leading-relaxed text-ink-soft">{ai.contextQuestionsBody}</p>
+            <div className="mt-5 space-y-2">
+              <p className="text-[12px] font-semibold text-ink-soft">{ai.contextSuggestedQuestions}</p>
+              <div className="flex flex-wrap gap-2">
+                {contextQuestions.map((q) => (
+                  <button
+                    key={q.key}
+                    type="button"
+                    onClick={() => handleSuggestedQuestion(q.text)}
+                    className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
+                  >
+                    {q.text}
+                  </button>
+                ))}
               </div>
             </div>
-          </section>
-
-          <section className={panel}>
-            <div className="space-y-4">
-              <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.contextQuestionsTitle}</h2>
-              <p className="text-[14px] leading-relaxed text-ink-soft">{ai.contextQuestionsBody}</p>
-              <div className="mt-5 space-y-2">
-                <p className="text-[12px] font-semibold text-ink-soft">{ai.contextSuggestedQuestions}</p>
-                <div className="flex flex-wrap gap-2">
-                  {contextQuestions.map((q) => (
-                    <button
-                      key={q.key}
-                      type="button"
-                      onClick={() => handleSuggestedQuestion(q.text)}
-                      className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
-                    >
-                      {q.text}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-        </>
+          </div>
+        </section>
       )}
 
       <section className={panel}>
