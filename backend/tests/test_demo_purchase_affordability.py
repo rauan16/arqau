@@ -8,6 +8,7 @@ import unittest
 from app.api.v1.demo_ai import (
     _build_demo_authoritative_facts,
     _build_demo_fallback_answer,
+    _is_available_funds_question,
     demo_chat_endpoint,
 )
 from app.core.rate_limit import get_provider_limiter
@@ -43,6 +44,23 @@ class DemoPurchaseAffordabilityCalculationTests(unittest.TestCase):
             is_purchase_affordability_question(
                 "How much can I spend right now?"
             )
+        )
+
+    def test_available_funds_question_is_classified_separately_from_ewa(self) -> None:
+        self.assertTrue(
+            _is_available_funds_question("How much money do I have available?")
+        )
+        self.assertTrue(
+            _is_available_funds_question("What's my available balance?")
+        )
+        self.assertTrue(
+            _is_available_funds_question("Сколько денег у меня доступно?")
+        )
+        self.assertFalse(
+            _is_available_funds_question("Can I withdraw 20,000 KZT?")
+        )
+        self.assertFalse(
+            _is_available_funds_question("What do I spend the most money on?")
         )
 
     def test_spend_amount_is_extracted_for_remaining_balance_scenario(self) -> None:
@@ -175,6 +193,38 @@ class DemoPurchaseAffordabilityChatTests(unittest.IsolatedAsyncioTestCase):
             1_440_000,
         )
         self.assertIn("500,000 KZT", response.response)
+
+    async def test_available_funds_question_gets_focused_deterministic_answer(self) -> None:
+        response = await demo_chat_endpoint(
+            ChatRequest(message="How much money do I have available?"),
+            FakeCopilotProvider(),
+            None,
+        )
+
+        self.assertTrue(response.ai_metadata.fallback_used)
+        self.assertFalse(response.ai_metadata.generated)
+        self.assertIn("14,400 KZT", response.response)
+        self.assertIn("57,400 KZT", response.response)
+        self.assertIn("74,400 KZT", response.response)
+        self.assertIn("Available EWA is **0 KZT**", response.response)
+        self.assertIn("actual bank balance", response.response.lower())
+        self.assertNotIn("Major expense categories", response.response)
+        self.assertEqual(
+            response.key_facts[0].text,
+            "Planning headroom after bills and reserve: 14,400 KZT.",
+        )
+
+    async def test_available_funds_question_supports_russian(self) -> None:
+        response = await demo_chat_endpoint(
+            ChatRequest(message="Сколько денег у меня доступно?"),
+            FakeCopilotProvider(),
+            None,
+        )
+
+        self.assertTrue(response.ai_metadata.fallback_used)
+        self.assertIn("14 400 ₸", response.response)
+        self.assertIn("Доступная сумма EWA — **0 ₸**", response.response)
+        self.assertIn("банковский баланс", response.response.lower())
 
     def test_purchase_fallback_avoids_unrelated_ewa_information(self) -> None:
         analysis = asdict(evaluate_demo_purchase_affordability(50_000_000))
