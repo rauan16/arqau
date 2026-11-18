@@ -48,6 +48,19 @@ class DemoPurchaseAffordabilityCalculationTests(unittest.TestCase):
         self.assertTrue(result.fits_period_buffer)
         self.assertEqual(result.shortfall_minor, 0)
 
+    def test_affordable_purchase_fallback_reports_positive_case(self) -> None:
+        analysis = asdict(evaluate_demo_purchase_affordability(1_000_000))
+        response = _build_demo_fallback_answer(
+            _build_demo_authoritative_facts("en"),
+            "en",
+            FALLBACK_NOT_CONFIGURED,
+            purchase_analysis=analysis,
+        )
+
+        self.assertIn("fits", response.response)
+        self.assertIn("10,000 KZT", response.response)
+        self.assertNotIn("does not fit", response.response)
+
     def test_purchase_headroom_is_available_without_a_price(self) -> None:
         result = evaluate_demo_purchase_affordability()
 

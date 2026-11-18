@@ -341,49 +341,85 @@ def _build_demo_purchase_fallback_answer(
         response = "\n\n".join((lead, detail, follow_up, fallback_note))
     else:
         purchase = _format_demo_purchase_money(int(purchase_minor), locale)
-        shortfall = fmt("shortfall_minor")
-        if locale == "ru":
-            lead = (
-                f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
-                "не укладывается в запас после оплаты предстоящих счетов и сохранения резерва."
-            )
-            detail = (
-                f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
-                f"на **{bills} ₸** остается **{after_bills} ₸**. Если сохранить "
-                f"целевой резерв **{reserve} ₸**, на покупку остается до **{headroom} ₸**."
-            )
-            gap = (
-                f"Покупка превышает этот запас на **{shortfall} ₸**. "
-                "Это оценка демо-денежного потока, а не проверка банковского счета."
-            )
-            limitation = (
-                "Фактический баланс и накопления на банковском счете неизвестны. "
-                "Отдельные сбережения, не отраженные в демо-профиле, могут изменить вывод."
-            )
-            fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+        if purchase_analysis.get("fits_period_buffer"):
+            remaining = fmt("remaining_after_purchase_and_bills_minor")
+            if locale == "ru":
+                lead = (
+                    f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
+                    "укладывается в запас после оплаты предстоящих счетов и сохранения целевого резерва."
+                )
+                detail = (
+                    f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                    f"на **{bills} ₸** и покупки расчетный остаток составит **{remaining} ₸**, "
+                    f"при целевом резерве **{reserve} ₸**."
+                )
+                limitation = (
+                    "Это оценка денежного потока, а не подтвержденные деньги на счете. "
+                    "Фактический банковский баланс и отдельные накопления неизвестны."
+                )
+                fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+            else:
+                lead = (
+                    f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
+                    "purchase fits after covering upcoming bills and preserving the reserve target."
+                )
+                detail = (
+                    f"The period-surplus indicator is **{surplus} KZT**. After "
+                    f"**{bills} KZT** in unpaid bills and this purchase, the calculated "
+                    f"remainder is **{remaining} KZT**, with a **{reserve} KZT** reserve target."
+                )
+                limitation = (
+                    "This is a cash-flow estimate, not confirmed money in your account. "
+                    "Your actual bank balance and separate savings are unknown."
+                )
+                fallback_note = (
+                    "This is the server-calculated estimate; the AI explanation is currently unavailable."
+                )
+            response = "\n\n".join((lead, detail, fallback_note))
         else:
-            lead = (
-                f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
-                "purchase does not fit while covering upcoming bills and preserving the reserve."
-            )
-            detail = (
-                f"The period-surplus indicator is **{surplus} KZT**. After "
-                f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains. "
-                f"Preserving the **{reserve} KZT** reserve target leaves up to "
-                f"**{headroom} KZT** for the purchase."
-            )
-            gap = (
-                f"The purchase exceeds that buffer by **{shortfall} KZT**. "
-                "This is a demo cash-flow estimate, not a check of your bank account."
-            )
-            limitation = (
-                "The actual bank balance and savings are unknown. Separate savings "
-                "not represented in the demo profile could change the conclusion."
-            )
-            fallback_note = (
-                "This is the server-calculated estimate; the AI explanation is currently unavailable."
-            )
-        response = "\n\n".join((lead, detail, gap, fallback_note))
+            shortfall = fmt("shortfall_minor")
+            if locale == "ru":
+                lead = (
+                    f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
+                    "не укладывается в запас после оплаты предстоящих счетов и сохранения резерва."
+                )
+                detail = (
+                    f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                    f"на **{bills} ₸** остается **{after_bills} ₸**. Если сохранить "
+                    f"целевой резерв **{reserve} ₸**, на покупку остается до **{headroom} ₸**."
+                )
+                gap = (
+                    f"Покупка превышает этот запас на **{shortfall} ₸**. "
+                    "Это оценка демо-денежного потока, а не проверка банковского счета."
+                )
+                limitation = (
+                    "Фактический баланс и накопления на банковском счете неизвестны. "
+                    "Отдельные сбережения, не отраженные в демо-профиле, могут изменить вывод."
+                )
+                fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+            else:
+                lead = (
+                    f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
+                    "purchase does not fit while covering upcoming bills and preserving the reserve."
+                )
+                detail = (
+                    f"The period-surplus indicator is **{surplus} KZT**. After "
+                    f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains. "
+                    f"Preserving the **{reserve} KZT** reserve target leaves up to "
+                    f"**{headroom} KZT** for the purchase."
+                )
+                gap = (
+                    f"The purchase exceeds that buffer by **{shortfall} KZT**. "
+                    "This is a demo cash-flow estimate, not a check of your bank account."
+                )
+                limitation = (
+                    "The actual bank balance and savings are unknown. Separate savings "
+                    "not represented in the demo profile could change the conclusion."
+                )
+                fallback_note = (
+                    "This is the server-calculated estimate; the AI explanation is currently unavailable."
+                )
+            response = "\n\n".join((lead, detail, gap, fallback_note))
 
     return CopilotAnswer(
         response=response,
