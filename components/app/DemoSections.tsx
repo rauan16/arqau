@@ -807,11 +807,11 @@ function DemoAiChat() {
   };
 
   const suggestedQuestions: Array<{ key: string; text: string }> = [
-    { key: "macbook", text: locale === "ru" ? "Могу ли я позволить себе купить MacBook за 500 000 ₸?" : "Can I afford to buy a MacBook for 500,000 ₸?" },
-    { key: "after_purchase", text: locale === "ru" ? "Сколько средств останется после такой покупки?" : "How much would I have left after this purchase?" },
-    { key: "bills_after_purchase", text: locale === "ru" ? "Покрою ли я предстоящие счета после покупки?" : "Could I still cover my upcoming bills after buying it?" },
-    { key: "reserve", text: locale === "ru" ? "Сколько лучше оставить в резерве до зарплаты?" : "How much should I keep in reserve until payday?" },
-    { key: "wait", text: locale === "ru" ? "Стоит ли купить сейчас или подождать зарплаты?" : "Should I buy now or wait until payday?" },
+    { key: "flight", text: locale === "ru" ? "Могу ли я купить авиабилет Алматы — Астана за 45 000 ₸?" : "Can I buy a flight Almaty — Astana for 45,000 ₸?" },
+    { key: "leftover", text: locale === "ru" ? "Сколько денег у меня останется после этой покупки?" : "How much money will I have left after this purchase?" },
+    { key: "bills", text: locale === "ru" ? "Какие обязательные платежи мне предстоят?" : "What upcoming mandatory payments do I have?" },
+    { key: "reserve", text: locale === "ru" ? "Сколько я могу потратить, чтобы сохранить резерв?" : "How much can I spend while keeping my reserve?" },
+    { key: "wait", text: locale === "ru" ? "Что лучше: купить сейчас или дождаться зарплаты?" : "Should I buy now or wait until payday?" },
   ];
 
   const context = buildDemoFinancialContext(state, locale);
