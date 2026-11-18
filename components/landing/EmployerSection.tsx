@@ -1,97 +1,108 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { employerDemo, formatTenge } from "@/lib/demoData";
+import { ArrowRight, Award, Handshake, Plug, UserRoundCheck, Users } from "lucide-react";
 import { useTranslation } from "@/lib/language-context";
+import { easeOut, fadeUp } from "@/lib/animations";
 
-const easeOut = [0.22, 1, 0.36, 1] as const;
+const benefits = [
+  { icon: UserRoundCheck, titleKey: "employerCard1Title", textKey: "employerCard1Text" },
+  { icon: Award, titleKey: "employerCard2Title", textKey: "employerCard2Text" },
+  { icon: Plug, titleKey: "employerCard3Title", textKey: "employerCard3Text" },
+  { icon: Handshake, titleKey: "employerCard4Title", textKey: "employerCard4Text" },
+  { icon: Users, titleKey: "employerCard5Title", textKey: "employerCard5Text" },
+] as const;
 
 export default function EmployerSection() {
   const { t } = useTranslation();
-  const max = Math.max(...employerDemo.weeklyActivity);
+  const l = t.landing;
+
   return (
-    <section id="employers" className="py-32 lg:py-40 bg-cream-soft">
-      <div className="container-arqau">
-        <div className="max-w-[560px] mb-14">
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.5, ease: easeOut }}
-            className="eyebrow mb-5 reveal-text"
-          >
-            {t.landing.employerEyebrow}
+    <section id="solutions" className="relative overflow-hidden bg-cream py-16 sm:py-20 lg:py-28">
+      {/* Soft warm wash behind the hero and a thin hairline accent at the section edge. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[380px]"
+        style={{
+          background: "radial-gradient(58% 100% at 50% 0%, var(--cream-orange) 0%, transparent 72%)",
+          opacity: 0.8,
+        }}
+      />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-0 h-[2px] w-16 -translate-x-1/2 bg-orange/50"
+      />
+
+      <div className="container-arqau relative">
+        <div className="mx-auto flex max-w-[780px] flex-col items-center text-center">
+          <motion.span {...fadeUp(0)} className="pill-badge mb-5">
+            {l.employerEyebrow}
+          </motion.span>
+
+          <motion.p {...fadeUp(0.05)} className="eyebrow">
+            {l.employerCorporateLabel}
           </motion.p>
+
           <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, ease: easeOut }}
-            className="text-[38px] sm:text-[50px] lg:text-[58px] font-extrabold leading-[1.01] tracking-[-0.03em] mb-7 reveal-text text-balance"
+            {...fadeUp(0.1)}
+            className="mt-4 text-balance text-[34px] font-extrabold leading-[1.06] tracking-normal text-ink sm:text-[46px] lg:text-[54px]"
           >
-            Give employees more control over earned income.
+            {l.employerTitleLead}{" "}
+            <span className="font-serif font-medium italic text-orange">{l.employerTitleHighlight}</span>
+            {l.employerTitleTail}
           </motion.h2>
+
           <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
-            className="text-[18px] leading-[1.7] text-ink-soft mb-9 max-w-[520px] reveal-text"
+            {...fadeUp(0.18)}
+            className="mt-6 max-w-[620px] text-[16px] leading-[1.75] text-ink-soft sm:text-[17px]"
           >
-            ARQAU gives employers a modern layer for earned wage access, withdrawal controls and employee financial wellbeing.
+            {l.employerSubtitle}
           </motion.p>
+
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, delay: 0.2, ease: easeOut }}
+            {...fadeUp(0.26)}
+            className="mt-9 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4"
           >
-            <a href="/business/register" className="btn-primary">{t.landing.employerCta} →</a>
+            <a href="/business/register" className="btn-primary w-full sm:w-auto">
+              {l.employerCta} <ArrowRight size={17} className="btn-arrow" />
+            </a>
+            <a href="#product" className="btn-outline w-full sm:w-auto">
+              {l.employerCtaSecondary} <ArrowRight size={16} className="btn-arrow" />
+            </a>
           </motion.div>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.6, ease: easeOut }}
-          className="card-dark rounded-[30px] p-8 sm:p-12 max-w-[1100px] text-cream shadow-[0_32px_80px_-48px_rgba(21,21,21,0.65)]"
+        <div className="mt-14 grid gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:grid-cols-5">
+          {benefits.map((b, index) => (
+            <motion.article
+              key={b.titleKey}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6, delay: 0.05 + index * 0.07, ease: easeOut }}
+              className="group flex flex-col rounded-[16px] border border-border bg-white/75 p-6 transition-colors duration-300 hover:border-orange/40 hover:bg-white"
+            >
+              <b.icon size={22} strokeWidth={1.7} className="text-orange" aria-hidden="true" />
+              <h3 className="mt-4 text-[15.5px] font-extrabold leading-snug text-ink">{l[b.titleKey]}</h3>
+              <p className="mt-2 text-[13.5px] leading-[1.65] text-ink-soft">{l[b.textKey]}</p>
+              <span
+                aria-hidden="true"
+                className="mt-5 h-[2px] w-6 rounded-full bg-orange/30 transition-all duration-300 group-hover:w-12 group-hover:bg-orange"
+              />
+            </motion.article>
+          ))}
+        </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="mx-auto mt-10 max-w-[720px] text-center text-[12.5px] leading-relaxed text-ink-muted lg:mt-12"
         >
-          <div className="flex items-center justify-between mb-8">
-            <p className="text-[12px] font-semibold tracking-[0.08em] text-cream/60">ARQAU FOR BUSINESS</p>
-            <span className="text-[11px] font-medium text-cream/40 border border-cream/20 rounded-full px-2.5 py-1">
-              Illustrative example
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-7 mb-12">
-            <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.employees}</p>
-              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{employerDemo.employees.toLocaleString("en-US")}</p>
-            </div>
-            <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.earnedPayroll}</p>
-              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{formatTenge(employerDemo.earnedPayroll)}</p>
-            </div>
-            <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">{t.employer.activeThisMonth}</p>
-              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{employerDemo.activeThisMonth.toLocaleString("en-US")}</p>
-            </div>
-            <div>
-              <p className="text-[12px] text-cream/70 mb-1.5">Withdrawals</p>
-              <p className="text-[22px] sm:text-[28px] font-bold tracking-tight truncate">{formatTenge(employerDemo.withdrawals)}</p>
-            </div>
-          </div>
-
-          <div className="flex items-end gap-3 h-28 border-t border-cream/10 pt-7">
-            {employerDemo.weeklyActivity.map((v, i) => (
-              <div key={i} className="flex-1 rounded-t-md bg-orange-2" style={{ height: `${(v / max) * 100}%` }} />
-            ))}
-          </div>
-          <p className="text-[11.5px] text-cream/40 mt-4">
-            {t.landing.employerIllustrative}
-          </p>
-        </motion.div>
+          {l.employerDisclaimer}
+        </motion.p>
       </div>
     </section>
   );

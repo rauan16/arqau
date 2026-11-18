@@ -4,73 +4,79 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { useTranslation } from "@/lib/language-context";
-
-const easeOut = [0.22, 1, 0.36, 1] as const;
+import { easeOut } from "@/lib/animations";
 
 export default function FinalCTA() {
   const { t } = useTranslation();
+  const l = t.landing;
+
   return (
-    <section id="final-cta" className="relative overflow-hidden bg-orange text-cream py-32 lg:py-44">
-      <div className="pointer-events-none absolute inset-0">
-        <Image
-          src="/Kazakhstan1-e1496914203779.jpg"
-          alt="Kazakhstan mountain landscape"
-          fill
-          priority
-          sizes="100vw"
-          className="absolute inset-0 h-full w-full object-cover object-center opacity-40"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(47,83,56,0.98)_0%,rgba(47,83,56,0.85)_42%,rgba(47,83,56,0.5)_100%)]" />
-      </div>
-
-      <div className="container-arqau relative z-10 grid lg:grid-cols-[1.2fr_0.8fr] gap-10 items-end">
-        <div>
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5, ease: easeOut }}
-            className="text-[12px] font-bold tracking-[0.1em] uppercase text-cream/70 mb-6"
-          >
-            {t.landing.finalCTAEyebrow}
-          </motion.p>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, delay: 0.1, ease: easeOut }}
-            className="text-[40px] sm:text-[54px] lg:text-[68px] font-serif font-medium leading-[1.02] tracking-[-0.025em] text-balance"
-          >
-            {t.landing.finalCTATitle}
-            <br />
-            {t.landing.finalCTASubtitle}
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.5, delay: 0.2, ease: easeOut }}
-            className="mt-7 text-[16px] leading-[1.7] text-cream/80 max-w-[380px]"
-          >
-            Explore the ARQAU concept: earned income visibility, controlled access and financial context in one product experience.
-          </motion.p>
-        </div>
-
+    <section id="final-cta" className="bg-cream py-8 sm:py-12 lg:py-16">
+      <div className="container-arqau">
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 28 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5, delay: 0.3, ease: easeOut }}
-          className="flex flex-col sm:flex-row lg:flex-col items-start gap-4"
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.8, ease: easeOut }}
+          className="relative min-h-[480px] overflow-hidden rounded-[16px] lg:min-h-[440px]"
         >
-          <a href="/signup" className="inline-flex items-center gap-2 bg-cream text-ink px-6 py-3.5 rounded-[10px] font-semibold text-[15px] hover:bg-white transition-colors">
-            {t.ctaGetStarted} <ArrowRight size={16} />
-          </a>
-          <a href="#how-it-works" className="inline-flex items-center gap-2 text-cream font-semibold text-[15px] border-b border-cream/40 pb-0.5 hover:border-cream transition-colors">
-            {t.ctaLearnMore}
-          </a>
+          <Image
+            src="/Kazakhstan1-e1496914203779.jpg"
+            alt={l.finalCTAImageAlt}
+            fill
+            sizes="(max-width: 1280px) 100vw, 1280px"
+            className="object-cover object-[50%_45%]"
+          />
+          <div
+            aria-hidden="true"
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(100deg, rgba(20,14,10,0.90) 0%, rgba(20,14,10,0.72) 48%, rgba(20,14,10,0.18) 100%)",
+            }}
+          />
+
+          <div className="relative z-10 flex min-h-[480px] flex-col justify-center px-6 py-12 sm:px-10 lg:min-h-[440px] lg:px-16">
+            <motion.h2
+              className="hero-motion max-w-[12ch] text-[34px] font-extrabold leading-[1.08] tracking-normal text-white text-balance sm:text-[44px] lg:text-[48px]"
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.7, delay: 0.1, ease: easeOut }}
+            >
+              {l.finalCTATitleLead}
+              <span className="font-serif font-medium italic text-orange">{l.finalCTATitleHighlight}</span>
+              {l.finalCTATitleTail}
+            </motion.h2>
+
+            <motion.p
+              className="hero-motion mt-5 max-w-[500px] text-[15px] leading-[1.7] text-white/75 sm:text-[16px]"
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.6, delay: 0.2, ease: easeOut }}
+            >
+              {l.finalCTASubtitle}
+            </motion.p>
+
+            <motion.div
+              className="hero-motion mt-7 flex flex-wrap items-center gap-3"
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.6, delay: 0.3, ease: easeOut }}
+            >
+              <a href="/signup" className="btn-primary">
+                {l.finalCTACtaPrimary} <ArrowRight size={17} className="btn-arrow" />
+              </a>
+              <a
+                href="/business/register"
+                className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-white/70 px-7 py-[15px] text-[15.5px] font-bold text-white transition-colors hover:border-white hover:bg-white/10"
+              >
+                {l.finalCTACtaSecondary}
+              </a>
+            </motion.div>
+          </div>
         </motion.div>
       </div>
     </section>

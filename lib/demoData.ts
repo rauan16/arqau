@@ -17,6 +17,9 @@ export const scenario = {
   illustrativeExample: true,
 };
 
+/** 0-based month index matching `scenario.month` (September 2026). */
+export const demoCurrentMonthIndex = 8;
+
 export const upcomingExpenses = [
   { label: "Rent", amount: 45000 },
   { label: "Food", amount: 25000 },
@@ -24,6 +27,207 @@ export const upcomingExpenses = [
 ];
 
 export const weeklyEarnings = [22000, 26000, 24000, 30000, 28000, 33000, 24400];
+
+/* ------------------------------------------------------------------ *
+ * Product demo: analytics
+ *
+ * The landing page plots illustrative datasets for every metric/period
+ * combination. Values are generated deterministically from a seeded
+ * profile so a given metric + period always renders the same chart.
+ * ------------------------------------------------------------------ */
+
+export type AnalyticsMetricId = "expenses" | "income" | "savings";
+
+export type AnalyticsPeriodId = "7d" | "30d" | "3m" | "6m" | "12m";
+
+export type AnalyticsGranularity = "day" | "month";
+
+export type AnalyticsPoint = {
+  label: string;
+  value: number;
+};
+
+export type AnalyticsPeriod = {
+  id: AnalyticsPeriodId;
+  /** Number of plotted points. */
+  points: number;
+  /** Aggregate size of a single plotted point. */
+  granularity: AnalyticsGranularity;
+};
+
+export const analyticsPeriods: readonly AnalyticsPeriod[] = [
+  { id: "7d", points: 7, granularity: "day" },
+  { id: "30d", points: 30, granularity: "day" },
+  { id: "3m", points: 3, granularity: "month" },
+  { id: "6m", points: 6, granularity: "month" },
+  { id: "12m", points: 12, granularity: "month" },
+];
+
+export const defaultAnalyticsPeriod: AnalyticsPeriodId = "6m";
+
+export const defaultAnalyticsMetric: AnalyticsMetricId = "expenses";
+
+type MetricProfile = {
+  id: AnalyticsMetricId;
+  /** Typical monthly total for the metric. */
+  monthlyBase: number;
+  /** Weekday weighting used for daily views (7 entries, Mon → Sun). */
+  dailyPattern: number[];
+  /** Relative drift applied per plotted month. */
+  monthlyTrend: number;
+  monthlySwing: number;
+  dailySwing: number;
+  seed: number;
+};
+
+export const analyticsMetrics: readonly MetricProfile[] = [
+  {
+    id: "expenses",
+    monthlyBase: 96000,
+    dailyPattern: [1.02, 0.98, 1.05, 1.12, 1.24, 1.18, 0.86],
+    monthlyTrend: 0.018,
+    monthlySwing: 0.16,
+    dailySwing: 0.18,
+    seed: 17,
+  },
+  {
+    id: "income",
+    monthlyBase: 300000,
+    dailyPattern: [1, 1, 1, 1, 1, 0.16, 0.16],
+    monthlyTrend: 0.01,
+    monthlySwing: 0.05,
+    dailySwing: 0.08,
+    seed: 43,
+  },
+  {
+    id: "savings",
+    monthlyBase: 42000,
+    dailyPattern: [0.9, 1.1, 1, 1.15, 0.95, 1.3, 1.2],
+    monthlyTrend: 0.06,
+    monthlySwing: 0.26,
+    dailySwing: 0.22,
+    seed: 71,
+  },
+];
+
+export function getAnalyticsPeriod(id: AnalyticsPeriodId): AnalyticsPeriod {
+  const found = analyticsPeriods.find((p) => p.id === id);
+  if (!found) throw new Error(`Unknown analytics period: ${id}`);
+  return found;
+}
+
+export function getMetricProfile(id: AnalyticsMetricId): MetricProfile {
+  const found = analyticsMetrics.find((m) => m.id === id);
+  if (!found) throw new Error(`Unknown analytics metric: ${id}`);
+  return found;
+}
+
+// Deterministic pseudo-random source in [0, 1) — keeps demo charts stable
+// across renders, reloads and test runs without external dependencies.
+function noise01(seed: number, index: number): number {
+  const raw = Math.sin(seed * 12.9898 + index * 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
+function roundTo(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+function monthlyValue(profile: MetricProfile, index: number): number {
+  const trend = 1 + profile.monthlyTrend * index;
+  const swing = 1 + (noise01(profile.seed, index) * 2 - 1) * profile.monthlySwing;
+  return Math.max(1000, roundTo(profile.monthlyBase * trend * swing, 1000));
+}
+
+function dailyValue(profile: MetricProfile, index: number): number {
+  const pattern = profile.dailyPattern[index % profile.dailyPattern.length];
+  const drift = 1 + profile.monthlyTrend * 0.02 * index;
+  const swing = 1 + (noise01(profile.seed + 3, index) * 2 - 1) * profile.dailySwing;
+  // Salary lands mid-cycle, which keeps daily income views believable.
+  const payday = profile.id === "income" && (index + 1) % 15 === 0 ? 2.4 : 1;
+  const value = (profile.monthlyBase / 30) * pattern * drift * swing * payday;
+  return Math.max(100, roundTo(value, 100));
+}
+
+export type AnalyticsLabels = {
+  /** 7 short weekday names, Monday first. */
+  weekdays: string[];
+  /** 12 short month names, January first. */
+  months: string[];
+  /** Index of the demo "current" month inside `months` (0-based). */
+  currentMonthIndex: number;
+};
+
+export type AnalyticsSummary = {
+  metric: AnalyticsMetricId;
+  period: AnalyticsPeriodId;
+  granularity: AnalyticsGranularity;
+  points: AnalyticsPoint[];
+  pointCount: number;
+  total: number;
+  average: number;
+  peak: AnalyticsPoint;
+  lowest: AnalyticsPoint;
+};
+
+/**
+ * Builds the chart + summary for one metric/period pair.
+ * Labels come from the active locale so the axis always matches the range.
+ */
+export function buildAnalytics(
+  metric: AnalyticsMetricId,
+  period: AnalyticsPeriodId,
+  labels: AnalyticsLabels,
+): AnalyticsSummary {
+  const profile = getMetricProfile(metric);
+  const config = getAnalyticsPeriod(period);
+
+  const points: AnalyticsPoint[] = [];
+  for (let i = 0; i < config.points; i += 1) {
+    const value =
+      config.granularity === "month"
+        ? monthlyValue(profile, i)
+        : dailyValue(profile, i);
+
+    const label =
+      config.granularity === "month"
+        ? labels.months[(labels.currentMonthIndex - config.points + 1 + i + 12) % 12]
+        : config.points === 7
+          ? labels.weekdays[i % 7]
+          : String(i + 1);
+
+    points.push({ label, value });
+  }
+
+  const values = points.map((p) => p.value);
+  const total = values.reduce((sum, v) => sum + v, 0);
+  const peak = points.reduce((best, p) => (p.value > best.value ? p : best), points[0]);
+  const lowest = points.reduce((best, p) => (p.value < best.value ? p : best), points[0]);
+
+  return {
+    metric,
+    period,
+    granularity: config.granularity,
+    points,
+    pointCount: config.points,
+    total,
+    average: Math.round(total / config.points),
+    peak,
+    lowest,
+  };
+}
+
+/** How many bars share a visible axis label, so 30-point charts stay readable. */
+export function getLabelStride(pointCount: number): number {
+  if (pointCount <= 7) return 1;
+  if (pointCount <= 12) return 2;
+  return 5;
+}
+
+export function shouldShowLabel(index: number, pointCount: number): boolean {
+  const stride = getLabelStride(pointCount);
+  return index % stride === 0 || index === pointCount - 1;
+}
 
 // Deterministic status logic for the what-if simulator.
 // Every screen that shows a withdrawal amount reads from this function
@@ -65,6 +269,50 @@ export function evaluateWithdrawal(amount: number) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Product demo: withdrawal amounts
+ * ------------------------------------------------------------------ */
+
+/** Selectable demo amounts, in tenge. */
+export const withdrawalPresets: readonly number[] = [10000, 30000, 50000, 100000];
+
+/** A preset can only be chosen while it fits inside the available balance. */
+export function isPresetAvailable(amount: number, available: number = scenario.available): boolean {
+  return amount > 0 && amount <= available;
+}
+
+export function getAvailablePresets(available: number = scenario.available): number[] {
+  return withdrawalPresets.filter((amount) => isPresetAvailable(amount, available));
+}
+
+/**
+ * Largest preset that keeps the reserve intact. Used as the default
+ * selection and as the "recommended amount" surfaced in the demo cards.
+ */
+export function getRecommendedWithdrawal(): number {
+  const available = scenario.available;
+  const affordable = withdrawalPresets.filter((amount) => isPresetAvailable(amount, available));
+  const comfortable = affordable.filter((amount) => evaluateWithdrawal(amount).status === "comfortable");
+  const pool = comfortable.length > 0 ? comfortable : affordable;
+  return Math.max(...pool);
+}
+
+export type WithdrawalGuidance = {
+  amount: number;
+  remainingAvailable: number;
+  status: WithdrawalStatus;
+};
+
+/** Status of a chosen amount — drives the advice copy in the demo. */
+export function getWithdrawalGuidance(amount: number): WithdrawalGuidance {
+  const result = evaluateWithdrawal(amount);
+  return {
+    amount,
+    remainingAvailable: result.remainingAvailable,
+    status: result.status,
+  };
+}
+
 export const employerDemo = {
   employees: 1284,
   earnedPayroll: 38400000,
@@ -103,5 +351,5 @@ export const aiInsights = [
 ];
 
 export function formatTenge(value: number) {
-  return `${value.toLocaleString("en-US")} ₸`;
+  return `${value.toLocaleString("ru-RU")} ₸`;
 }

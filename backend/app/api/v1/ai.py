@@ -1,200 +1,142 @@
+"""AI endpoints (Phase 3.4 Financial Copilot).
+
+Both endpoints sit on top of the authoritative deterministic pipeline:
+
+    FinancialContext (Phase 3.1)
+        -> deterministic withdrawal analysis (Phase 3.2)
+            -> safe AI explanation (Phase 3.3 / Phase 3.4)
+
+Neither endpoint creates a WageAccessRequest, approves a withdrawal, or mutates
+any financial state. Both are read-only snapshots.
+
+- POST /ai/chat is the Financial Copilot. Its entire authoritative input comes
+  from `build_financial_context`; the LLM only writes explanatory prose.
+- POST /ai/analyze-withdrawal is deprecated and now delegates to the Phase 3.3
+  decision service. It no longer reads the legacy `EarnedWages` table, no
+  longer sums transactions, and no longer asks the LLM to determine risk,
+  recommendation, reserve status, or expense coverage.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from app.database import get_db
-from app.models import User, Transaction, EarnedWages
-from app.schemas.ai import WithdrawalAnalysis, ChatRequest, ChatResponse
-from app.services.ai_service import analyze_withdrawal, chat_with_user
-from app.api.v1.auth import get_current_user
-from app.config import get_settings
 
-settings = get_settings()
+from app.api.v1.auth import get_current_user
+from app.database import get_db
+from app.models import User
+from app.schemas.ai import ChatRequest
+from app.schemas.ai_copilot import CopilotResponse
+from app.schemas.ai_decision import WithdrawalDecisionResponse
+from app.services.ai_copilot import CopilotProvider, answer_copilot_query, get_copilot_provider
+from app.services.ai_decision import (
+    DecisionAIProvider,
+    get_decision_provider,
+    make_withdrawal_decision,
+)
+from app.core.rate_limit import enforce_total_ceiling
+
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-@router.post("/analyze-withdrawal", response_model=WithdrawalAnalysis)
-async def analyze_withdrawal_endpoint(
-    request: dict,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    withdrawal_amount = request.get("withdrawal_amount")
-    if withdrawal_amount is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="withdrawal_amount is required")
-    try:
-        withdrawal_amount = int(withdrawal_amount)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="withdrawal_amount must be an integer")
-    if withdrawal_amount <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="withdrawal_amount must be positive")
-
-    ew_result = await db.execute(select(EarnedWages).where(EarnedWages.user_id == current_user.id))
-    ew = ew_result.scalar_one_or_none()
-    if not ew:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No earned wages found. Set earned wages first.")
-
-    available = ew.available_amount_minor
-    if withdrawal_amount > available:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Amount exceeds available balance of {available} ₸")
-
-    income_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount_minor), 0)).where(
-            Transaction.user_id == current_user.id, Transaction.type == "income"
-        )
-    )
-    expense_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount_minor), 0)).where(
-            Transaction.user_id == current_user.id, Transaction.type == "expense"
-        )
-    )
-    total_income = income_result.scalar() or 0
-    total_expenses = expense_result.scalar() or 0
-    net_balance = total_income - total_expenses
-
-    financial_context = {
-        "earned_amount": ew.earned_amount_minor,
-        "accessed_amount": ew.accessed_amount_minor,
-        "available_amount": available,
-        "withdrawal_amount": withdrawal_amount,
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "net_balance": net_balance,
-    }
-
-    if not settings.openai_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service is not configured. Please contact support.",
-        )
-
-    try:
-        result = await analyze_withdrawal(financial_context)
-        return WithdrawalAnalysis(**result)
-    except RuntimeError as e:
-        msg = str(e)
-        if msg == "AI_QUOTA_EXCEEDED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
-            )
-        if msg == "AI_CREDITS_EXCEEDED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI analysis is temporarily unavailable due to service limits. Please try again later.",
-            )
-        if msg == "AI_MALFORMED_RESPONSE":
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="AI analysis returned an unexpected response. Please try again.",
-            )
-        if msg == "AI_AUTH_FAILED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service is temporarily misconfigured. Please contact support.",
-            )
-        if msg == "AI_TIMEOUT":
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="AI analysis timed out. Please try again.",
-            )
-        if msg == "AI_CONNECTION_ERROR":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service is temporarily unreachable. Please try again later.",
-            )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI analysis is temporarily unavailable. Please try again later.",
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI analysis is temporarily unavailable. Please try again later.",
-        )
+async def _require_ai_request(current_user: User = Depends(get_current_user)) -> User:
+    """Enforce total AI request ceiling (Tier 2)."""
+    await enforce_total_ceiling(str(current_user.id))
+    return current_user
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=CopilotResponse)
 async def chat_endpoint(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_require_ai_request),
     db: AsyncSession = Depends(get_db),
-):
-    ew_result = await db.execute(select(EarnedWages).where(EarnedWages.user_id == current_user.id))
-    ew = ew_result.scalar_one_or_none()
-    earned_amount = ew.earned_amount_minor if ew else 0
-    accessed_amount = ew.accessed_amount_minor if ew else 0
-    available_amount = ew.available_amount_minor if ew else 0
+    provider: CopilotProvider = Depends(get_copilot_provider),
+    calculation_date: Optional[date] = None,
+) -> CopilotResponse:
+    """Phase 3.4 Financial Copilot endpoint (read-only).
 
-    income_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount_minor), 0)).where(
-            Transaction.user_id == current_user.id, Transaction.type == "income"
-        )
+    Builds the authoritative Phase 3.1 FinancialContext for the authenticated
+    user, sanitizes an allow-listed fact payload for the provider, and returns a
+    structured answer whose authoritative numeric fields are assembled
+    server-side.
+
+    On any provider problem — missing configuration, timeout, connection
+    failure, rate limit, HTTP failure, malformed output, or schema violation —
+    a deterministic, server-owned answer is returned instead of an error, so
+    the financial snapshot always stays available and internal provider errors
+    are never exposed.
+    """
+    return await answer_copilot_query(
+        db,
+        current_user,
+        request.message,
+        request.conversation_id,
+        calculation_date,
+        provider,
     )
-    expense_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount_minor), 0)).where(
-            Transaction.user_id == current_user.id, Transaction.type == "expense"
-        )
-    )
-    total_income = income_result.scalar() or 0
-    total_expenses = expense_result.scalar() or 0
-    net_balance = total_income - total_expenses
 
-    financial_context = {
-        "earned_amount": earned_amount,
-        "accessed_amount": accessed_amount,
-        "available_amount": available_amount,
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "net_balance": net_balance,
-    }
 
-    if not settings.openai_api_key:
+def _extract_withdrawal_amount(payload: dict[str, Any]) -> int:
+    """Accept the legacy `withdrawal_amount` and the newer `amount_minor` key."""
+    raw = payload.get("withdrawal_amount")
+    if raw is None:
+        raw = payload.get("amount_minor")
+    if raw is None:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service is not configured. Please contact support.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="withdrawal_amount is required",
         )
-
     try:
-        result = await chat_with_user(request.message, financial_context)
-        return ChatResponse(**result)
-    except RuntimeError as e:
-        msg = str(e)
-        if msg == "AI_QUOTA_EXCEEDED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
-            )
-        if msg == "AI_CREDITS_EXCEEDED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI assistant is temporarily unavailable due to service limits. Please try again later.",
-            )
-        if msg == "AI_MALFORMED_RESPONSE":
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="AI assistant returned an unexpected response. Please try again.",
-            )
-        if msg == "AI_AUTH_FAILED":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service is temporarily misconfigured. Please contact support.",
-            )
-        if msg == "AI_TIMEOUT":
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="AI assistant timed out. Please try again.",
-            )
-        if msg == "AI_CONNECTION_ERROR":
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service is temporarily unreachable. Please try again later.",
-            )
+        amount = int(raw)
+    except (TypeError, ValueError):
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI assistant is temporarily unavailable. Please try again later.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="withdrawal_amount must be an integer",
         )
-    except Exception:
+    if amount <= 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI assistant is temporarily unavailable. Please try again later.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="withdrawal_amount must be positive",
         )
+    return amount
+
+
+@router.post(
+    "/analyze-withdrawal",
+    response_model=WithdrawalDecisionResponse,
+    deprecated=True,
+)
+async def analyze_withdrawal_endpoint(
+    request: dict,
+    current_user: User = Depends(_require_ai_request),
+    db: AsyncSession = Depends(get_db),
+    provider: DecisionAIProvider = Depends(get_decision_provider),
+    calculation_date: Optional[date] = None,
+) -> WithdrawalDecisionResponse:
+    """Deprecated: use POST /financial/withdrawal-analysis or
+    POST /financial/withdrawal-decision.
+
+    Retained for API compatibility. Request validation (missing, non-integer,
+    or non-positive amount -> 400) and authentication (401) are unchanged.
+
+    The response body is now the authoritative Phase 3.3
+    `WithdrawalDecisionResponse`. Two legacy behaviours are intentionally gone,
+    because both were AI-side financial calculation rather than backend
+    validation:
+
+    - the `EarnedWages`-based "no earned wages found" / "amount exceeds
+      available balance" 400s are replaced by the deterministic Phase 3.2
+      blocking reasons, which are returned as data (HTTP 200),
+    - the LLM no longer decides `risk_level`, `recommendation`,
+      `reserve_status`, or `covered_expenses`; those fields are removed because
+      the backend must not take financial advice from a model.
+
+    Read-only: no WageAccessRequest is created.
+    """
+    amount_minor = _extract_withdrawal_amount(request)
+    return await make_withdrawal_decision(
+        db, current_user, amount_minor, calculation_date, provider
+    )

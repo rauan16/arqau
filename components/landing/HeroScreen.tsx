@@ -1,77 +1,160 @@
-import { ArrowRight, Home, LineChart, Wallet, Sparkles, CalendarDays, CircleUserRound } from "lucide-react";
-import { scenario, weeklyEarnings, formatTenge } from "@/lib/demoData";
+import {
+  ArrowRight,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
+  Briefcase,
+  CalendarDays,
+  Home,
+  LineChart,
+  Search,
+  Sparkles,
+  Wallet,
+} from "lucide-react";
+import { scenario, formatTenge } from "@/lib/demoData";
+import { useTranslation } from "@/lib/language-context";
+import BrandLogo from "@/components/ui/BrandLogo";
+
+const activityIcons = [ArrowUpRight, ArrowDownLeft, Sparkles];
 
 export default function HeroScreen() {
-  const max = Math.max(...weeklyEarnings);
+  const { t } = useTranslation();
+  const p = t.landingHero.phone;
+
+  const activity = [
+    { title: p.payout, date: p.date1, amount: formatTenge(-50000), meta: p.done, tone: "negative" },
+    { title: p.payroll, date: p.date2, amount: `+${formatTenge(scenario.earned)}`, meta: p.received, tone: "positive" },
+    { title: p.aiRec, date: p.date3, amount: "", meta: p.view, tone: "muted" },
+  ];
+
+  const tabs = [
+    { icon: Home, label: p.tabHome },
+    { icon: LineChart, label: p.tabAnalytics },
+    { icon: Wallet, label: p.tabAccounts },
+    { icon: CalendarDays, label: p.tabProfile },
+  ];
 
   return (
-    <div className="flex flex-col h-full pt-[42px] px-5 pb-4 font-sans bg-[#fbf7f1]">
-      <div className="flex items-center justify-between mb-6">
-        <span className="text-[11px] font-extrabold tracking-[0.1em] text-ink-soft">ARQAU</span>
-        <CircleUserRound size={21} className="text-ink-soft" strokeWidth={1.7} />
+    <div className="flex h-full flex-col bg-white px-5 pb-4 pt-12">
+      {/* status bar */}
+      <div className="mb-4 flex items-center justify-between text-[11px] font-semibold text-ink">
+        <span className="numbers">9:41</span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-end gap-[2px]">
+            <span className="h-[4px] w-[3px] rounded-sm bg-ink" />
+            <span className="h-[6px] w-[3px] rounded-sm bg-ink" />
+            <span className="h-[8px] w-[3px] rounded-sm bg-ink" />
+            <span className="h-[10px] w-[3px] rounded-sm bg-ink/30" />
+          </span>
+          <span className="h-[9px] w-[13px] rounded-[3px] border border-ink">
+            <span className="mt-[1.5px] ml-[1.5px] block h-[4px] w-[7px] rounded-[1px] bg-ink" />
+          </span>
+        </span>
       </div>
 
-      <p className="text-[13px] text-ink-soft mb-1">Good morning, {scenario.employeeName} <span className="text-orange">✦</span></p>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[12px] text-ink-soft">Earned this month</p>
-        <span className="text-[10px] text-ink-soft/70">This month →</span>
-      </div>
-
-      <p className="text-[34px] font-extrabold leading-none tracking-tight mb-5 numbers">
-        {formatTenge(scenario.earned)}
-      </p>
-
-      <div className="grid grid-cols-2 gap-2.5 mb-3">
-        <div className="rounded-[18px] bg-orange text-cream p-3.5">
-          <p className="text-[10.5px] opacity-85 mb-1">Available</p>
-          <p className="text-[19px] font-bold leading-tight numbers">{formatTenge(scenario.available)}</p>
+      {/* app header */}
+      <div className="mb-5 flex items-center justify-between">
+        <span className="flex items-center gap-2 text-[13px] font-extrabold tracking-[0.06em] text-ink">
+          <BrandLogo size={24} />
+          ARQAU
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-orange/30 px-2 py-1 text-[8px] font-bold uppercase text-orange-dark">
+            {t.landing.productDemoTag}
+          </span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-cream text-ink-soft">
+            <Search size={14} strokeWidth={2.2} />
+          </span>
         </div>
-        <div className="rounded-[18px] bg-white border border-ink/[0.07] p-3.5">
-          <p className="text-[10.5px] text-ink-soft mb-1">Recommended</p>
-          <p className="text-[19px] font-bold leading-tight numbers">{formatTenge(scenario.recommended)}</p>
-        </div>
       </div>
 
-      <div className="rounded-[18px] bg-white border border-ink/[0.07] p-3.5 mb-3 flex items-center justify-between">
+      {/* greeting */}
+      <div className="mb-4 flex items-start justify-between">
         <div>
-          <p className="text-[10.5px] text-ink-soft mb-0.5 flex items-center gap-1"><CalendarDays size={11} /> Next payday</p>
-          <p className="text-[14px] font-bold">{scenario.nextPaydayDays} days</p>
+          <p className="text-[16px] font-extrabold leading-tight text-ink">{p.greeting}</p>
+          <p className="mt-0.5 text-[11.5px] text-ink-soft">{p.role}</p>
         </div>
-        <div className="flex items-end gap-[3px] h-8">
-          {weeklyEarnings.map((v, i) => (
-            <div
-              key={i}
-              className="w-[6px] rounded-full bg-orange-2/70"
-              style={{ height: `${(v / max) * 100}%` }}
-            />
-          ))}
+        <Bell size={16} className="mt-1 text-ink-soft" strokeWidth={1.8} />
+      </div>
+
+      {/* earned */}
+      <div className="mb-2.5 rounded-[18px] border border-ink/[0.07] bg-cream/60 p-4">
+        <p className="mb-1 text-[11px] text-ink-soft">{p.earned}</p>
+        <div className="flex items-center justify-between">
+          <p className="numbers text-[26px] font-extrabold leading-none tracking-tight text-ink">
+            {formatTenge(scenario.earned)}
+          </p>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-ink/10 text-ink">
+            <ArrowRight size={13} />
+          </span>
         </div>
       </div>
 
-      <div className="rounded-[18px] bg-ink text-cream p-4 mt-auto mb-4">
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <Sparkles size={13} className="text-orange-2" />
-          <p className="text-[10.5px] font-semibold text-orange-2">ARQAU recommends</p>
+      {/* available */}
+      <div className="mb-2.5 flex items-center justify-between rounded-[18px] border border-ink/[0.07] bg-cream/60 px-4 py-3">
+        <p className="text-[11px] text-ink-soft">{p.available}</p>
+        <p className="numbers text-[16px] font-extrabold text-ink">{formatTenge(scenario.available)}</p>
+        <span className="text-[10px] text-ink-soft/60">Illustrative demo value only.</span>
+      </div>
+
+      {/* recommended */}
+      <div className="mb-3 flex items-center justify-between rounded-[18px] bg-orange-soft p-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange text-white">
+            <Briefcase size={14} strokeWidth={2} />
+          </span>
+          <div>
+            <p className="text-[10.5px] text-ink-soft">{p.recommended}</p>
+            <p className="numbers text-[15px] font-extrabold text-ink">{formatTenge(scenario.recommended)}</p>
+          </div>
         </div>
-        <p className="text-[19px] font-bold mb-1.5 numbers">{formatTenge(scenario.recommended)}</p>
-        <p className="text-[11.5px] text-cream/70 leading-snug mb-3">
-          Keeps your upcoming expenses covered while protecting your reserve target.
-        </p>
-        <div className="flex items-center gap-1 text-[12px] font-semibold text-orange-2">
-          View recommendation <ArrowRight size={13} />
+        <ArrowRight size={14} className="text-ink" />
+      </div>
+
+      {/* primary action */}
+      <button type="button" className="mb-4 w-full rounded-full bg-orange py-3 text-[13.5px] font-bold text-white shadow-[0_14px_26px_-14px_rgba(242,103,34,0.8)]">
+        {p.getMoney}
+      </button>
+
+      {/* activity */}
+      <div className="flex-1">
+        <p className="mb-2 text-[11.5px] font-bold text-ink">{p.activity}</p>
+        <div className="space-y-1.5">
+          {activity.map((item, i) => {
+            const Icon = activityIcons[i];
+            return (
+              <div key={item.title} className="flex items-center gap-2.5 rounded-[14px] border border-ink/[0.06] bg-white px-3 py-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-orange-soft text-orange-dark">
+                  <Icon size={12} strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[11px] font-semibold text-ink">{item.title}</p>
+                  <p className="text-[9.5px] text-ink-muted">{item.date}</p>
+                </div>
+                <div className="text-right">
+                  {item.amount && (
+                    <p
+                      className={`numbers text-[11px] font-bold ${
+                        item.tone === "positive" ? "text-ink" : item.tone === "negative" ? "text-ink" : ""
+                      }`}
+                    >
+                      {item.amount}
+                    </p>
+                  )}
+                  <p className="text-[9px] text-ink-muted">{item.meta}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-3 border-t border-ink/[0.07]">
-        {[
-          { icon: Home, label: "Home" },
-          { icon: LineChart, label: "Earnings" },
-          { icon: Wallet, label: "Expenses" },
-          { icon: Sparkles, label: "AI" },
-        ].map(({ icon: Icon, label }, i) => (
-          <div key={label} className={`flex flex-col items-center gap-1 ${i === 0 ? "text-ink" : "text-ink-soft/60"}`}>
+      {/* tab bar */}
+      <div className="mt-3 flex items-center justify-between border-t border-ink/[0.07] pt-3">
+        {tabs.map(({ icon: Icon, label }, i) => (
+          <div key={label} className={`flex flex-col items-center gap-1 ${i === 0 ? "text-orange" : "text-ink-muted"}`}>
             <Icon size={17} strokeWidth={2} />
-            <span className="text-[9px]">{label}</span>
+            <span className="text-[8.5px] font-semibold">{label}</span>
           </div>
         ))}
       </div>
