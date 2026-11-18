@@ -296,14 +296,14 @@ def _is_available_funds_question(message: str) -> bool:
     """
     normalized = re.sub(r"\s+", " ", (message or "").strip().lower())
     patterns = (
-        r"\bhow much (?:money|cash|funds) do i have available\\b",
-        r"\bhow much (?:money|cash|funds) (?:is )?available\\b",
-        r"\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\\b",
-        r"\bwhat(?:'s| is) my available (?:balance|funds|cash)\\b",
-        r"\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\\b",
-        r"\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\\b",
-        r"\bкакой у меня доступный (?:баланс|остаток)\\b",
-        r"\bкакой доступный (?:баланс|остаток)\\b",
+        r"\bhow much (?:money|cash|funds) do i have available\b",
+        r"\bhow much (?:money|cash|funds) (?:is )?available\b",
+        r"\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\b",
+        r"\bwhat(?:'s| is) my available (?:balance|funds|cash)\b",
+        r"\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\b",
+        r"\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\b",
+        r"\bкакой у меня доступный (?:баланс|остаток)\b",
+        r"\bкакой доступный (?:баланс|остаток)\b",
     )
     return any(re.search(pattern, normalized) for pattern in patterns)
 
@@ -403,7 +403,7 @@ def _build_demo_available_funds_fallback_answer(
         ]
 
     return CopilotAnswer(
-        response="\\n\\n".join((lead, detail, cash_note, ewa_note, fallback_note)),
+        response="\n\n".join((lead, detail, cash_note, ewa_note, fallback_note)),
         key_facts=[
             CopilotFact(code="available_amount", text=facts_text[0]),
             CopilotFact(code="ewa_available_amount", text=facts_text[1]),
