@@ -807,11 +807,11 @@ function DemoAiChat() {
   };
 
   const suggestedQuestions: Array<{ key: string; text: string }> = [
-    { key: "macbook", text: locale === "ru" ? "Могу ли я позволить себе купить MacBook за 500 000 ₸?" : "Can I afford to buy a MacBook for 500,000 ₸?" },
-    { key: "after_purchase", text: locale === "ru" ? "Сколько средств останется после такой покупки?" : "How much would I have left after this purchase?" },
-    { key: "bills_after_purchase", text: locale === "ru" ? "Покрою ли я предстоящие счета после покупки?" : "Could I still cover my upcoming bills after buying it?" },
-    { key: "reserve", text: locale === "ru" ? "Сколько лучше оставить в резерве до зарплаты?" : "How much should I keep in reserve until payday?" },
-    { key: "wait", text: locale === "ru" ? "Стоит ли купить сейчас или подождать зарплаты?" : "Should I buy now or wait until payday?" },
+    { key: "available", text: locale === "ru" ? "Сколько денег мне сейчас доступно?" : "How much money do I have available?" },
+    { key: "earned", text: locale === "ru" ? "Сколько я заработал(а) в этом месяце?" : "How much have I earned this month?" },
+    { key: "spend_now", text: locale === "ru" ? "Сколько я могу потратить прямо сейчас?" : "How much can I spend right now?" },
+    { key: "after_spending", text: locale === "ru" ? "Сколько денег у меня останется, если я потрачу 10 000 ₸?" : "How much will I have left if I spend 10,000 KZT?" },
+    { key: "top_spending", text: locale === "ru" ? "На что у меня уходит больше всего денег?" : "What do I spend the most money on?" },
   ];
 
   const context = buildDemoFinancialContext(state, locale);
