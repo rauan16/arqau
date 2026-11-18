@@ -575,19 +575,18 @@ def _build_demo_fallback_answer(
     # EWA education (system prompt §6): explain EWA, role of employer/employee, policy controls
     if locale == "ru":
         ewa_edu = (
-            f"EWA (Earned Wage Access) — это возможность получить часть заработанной зарплаты до дня выплаты. "
-            f"Политика EWA настраивает работодатель. Сейчас для вашего работодателя "
-            f"EWA-политика не настроена, поэтому досрочное получение недоступно. "
-            f"Оставшийся лимит EWA — **{ewa_available_kzt} ₸** — это способность системы, "
-            f"а не рекомендация или баланс на счете."
+            f"EWA (Earned Wage Access) — возможность получить часть заработанной зарплаты до дня выплаты. "
+            f"Политику EWA настраивает работодатель. Для вашего работодателя она пока не настроена, "
+            f"поэтому досрочное получение зарплаты недоступно. "
+            f"Доступная сумма EWA сейчас — **{ewa_available_kzt} ₸**. "
+            f"Это доступ к досрочной выплате, а не баланс банковского счета."
         )
     else:
         ewa_edu = (
-            f"EWA (Earned Wage Access) — the ability to access a portion of earned wages before "
-            f"payday. The EWA policy is configured by the employer. For your employer, "
-            f"the EWA policy is not currently configured, so early access is unavailable. "
-            f"The remaining EWA limit **{ewa_available_kzt} KZT** is the system's capability, "
-            f"not a recommendation or account balance."
+            f"EWA (Earned Wage Access) lets employees access part of their earned wages before payday. "
+            f"Your employer has not configured an EWA policy, so early wage access is unavailable. "
+            f"The available EWA amount is **{ewa_available_kzt} KZT**. "
+            f"This is an early-access limit, not your bank-account balance."
         )
     parts.append(ewa_edu)
 
