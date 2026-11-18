@@ -556,25 +556,6 @@ def _build_demo_fallback_answer(
             f"Reserve target is **{ctx.reserve_target} KZT**; {reserve_status_en}."
         )
 
-    # --- Key metrics (system prompt §2: compact table with relevant indicators) ---
-    # Use structured concise paragraphs; one paragraph per idea
-    metrics_ru = (
-        f"**Period surplus:** {ctx.reserve_saved} ₸ of **{ctx.reserve_target} ₸** reserve target ({int(ctx.reserve_progress * 100)}%). "
-        f"This is earned minus spent, not confirmed bank savings. "
-        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
-        f"**EWA capacity:** {ewa_available_kzt} ₸ (deterministic limit; no EWA policy configured). "
-        f"**Expenses this period:** {ctx.expense_amount} ₸ (Housing {ctx.expense_amount_Housing if hasattr(ctx, 'expense_amount_Housing') else ''}₸, "
-        f"Food {ctx.expense_amount_Food if hasattr(ctx, 'expense_amount_Food') else ''}₸, "
-        f"Transport {ctx.expense_amount_Transport if hasattr(ctx, 'expense_amount_Transport') else ''}₸)."
-    )
-    metrics_en = (
-        f"**Period surplus:** {ctx.reserve_saved} KZT of **{ctx.reserve_target} KZT** reserve target ({int(ctx.reserve_progress * 100)}%). "
-        f"This is earned minus spent, not confirmed bank savings. "
-        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
-        f"**EWA capacity:** {ewa_available_kzt} KZT (deterministic limit; no EWA policy configured). "
-        f"**Expenses this period:** {ctx.expense_amount} KZT (Housing, Food, Transport)."
-    )
-
     # --- Analysis & status (system prompt §2 order: analysis, then status/limitation) ---
     parts = [lead]
 
