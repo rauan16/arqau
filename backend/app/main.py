@@ -69,6 +69,10 @@ app.add_middleware(BodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_cors_origins,
+    # Vercel assigns a new hostname to each Preview deployment. Restrict the
+    # regex to this project's Preview hostname pattern so chat preflight
+    # requests keep working across redeploys without opening CORS globally.
+    allow_origin_regex=r"^https://arqau-[a-z0-9-]+-rauanserikov77-9300s-projects\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
