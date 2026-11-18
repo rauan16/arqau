@@ -290,6 +290,11 @@ Understand the following distinctions:
 - Available EWA: deterministic early wage access capacity, not a bank balance.
 - Reserved EWA: capacity reserved by pending or approved requests.
 - Reserve target: a planning target, not proof of accumulated savings.
+- Reserve progress: a display indicator capped at 1.0 (100%). A value of 1.0 means
+  the period surplus meets or exceeds the target; it is NOT the exact
+  period-surplus-to-target ratio. Never describe a surplus larger than the target
+  as exactly 100% of the target. State the amount above/below target instead.
+  Reserve progress never confirms accumulated savings.
 
 Never confuse these indicators.
 
@@ -379,7 +384,7 @@ Allowed `key_facts[].code` values (exactly 21):
 | `salary_summary` | Зарплата (контрактная) | `salary_amount_minor` (÷100) |
 | `expense_summary` | Расходы за период | `expense_amount_minor` (÷100) |
 | `surplus_summary` | Разница доходов и расходов | `period_net_surplus_minor` (÷100) |
-| `reserve_progress` | Прогресс целевого резерва | `reserve_progress_ratio` (0–1) |
+| `reserve_progress` | Индикатор достижения цели резерва, capped at 1.0; не точное отношение surplus к цели | `reserve_progress_ratio` (0–1) |
 | `budget_summary` | Сводка по бюджету | `budget_total_minor`, `budget_spent_minor` (÷100) |
 | `goal_summary` | Сводка по целям | `total_goal_target_minor`, `total_goal_saved_minor` (÷100) |
 | `earned_amount_minor` | Заработанная сумма в минорных единицах | `earned_amount_minor` (сырые тийины) |
