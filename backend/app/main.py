@@ -19,6 +19,17 @@ from app.models import Base
 
 settings = get_settings()
 
+# Stable Vercel alias for the investor/demo release branch. Unlike a
+# deployment-specific preview hostname, this alias remains constant across
+# commits, so browser requests keep passing CORS after each preview deploy.
+PREVIEW_CORS_ORIGINS = (
+    "https://arqau-git-release-v10-demo-rauanserikov77-9300s-projects.vercel.app",
+)
+allowed_cors_origins = list(dict.fromkeys([
+    *settings.cors_origins_list,
+    *PREVIEW_CORS_ORIGINS,
+]))
+
 logging.basicConfig(
     level=logging.INFO if settings.environment == "production" else logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -56,7 +67,7 @@ app.add_middleware(BodyLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=allowed_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
