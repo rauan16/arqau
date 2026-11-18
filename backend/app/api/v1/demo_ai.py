@@ -288,6 +288,146 @@ def _format_demo_purchase_money(amount_minor: int, locale: str) -> str:
     return formatted.replace(",", " ") if locale == "ru" else formatted
 
 
+def _is_available_funds_question(message: str) -> bool:
+    """Recognize direct questions about funds currently available to the user.
+
+    Keep this separate from EWA withdrawal intent: a generic available-money
+    question must not be answered with an EWA limit or a broad financial report.
+    """
+    normalized = re.sub(r"\\s+", " ", (message or "").strip().lower())
+    patterns = (
+        r"\\bhow much (?:money|cash|funds) do i have available\\b",
+        r"\\bhow much (?:money|cash|funds) (?:is )?available\\b",
+        r"\\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\\b",
+        r"\\bwhat(?:'s| is) my available (?:balance|funds|cash)\\b",
+        r"\\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\\b",
+        r"\\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\\b",
+        r"\\bкакой у меня доступный (?:баланс|остаток)\\b",
+        r"\\bкакой доступный (?:баланс|остаток)\\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _build_demo_available_funds_fallback_answer(
+    facts: Optional[AuthoritativeCopilotFacts],
+    locale: str,
+    fallback_reason: str,
+    analysis: dict[str, Any],
+) -> CopilotAnswer:
+    """Answer available-funds questions without conflating cash, headroom and EWA."""
+    if facts is None:
+        facts = _build_demo_authoritative_facts(locale)
+
+    fmt = lambda key: _format_demo_purchase_money(int(analysis[key]), locale)
+    surplus = fmt("period_surplus_minor")
+    bills = fmt("upcoming_bills_unpaid_minor")
+    after_bills = fmt("amount_after_bills_minor")
+    reserve = fmt("reserve_target_minor")
+    headroom = fmt("purchase_headroom_minor")
+    ewa_available = _format_demo_purchase_money(
+        facts.available_amount_minor or 0, locale
+    )
+
+    if locale == "ru":
+        if int(analysis["purchase_headroom_minor"]) > 0:
+            lead = (
+                f"По расчету демо-профиля после обязательных платежей и целевого резерва "
+                f"остается до **{headroom} ₸** свободного запаса."
+            )
+        else:
+            lead = (
+                "По расчету демо-профиля после обязательных платежей и целевого резерва "
+                "свободного запаса для дополнительных трат не остается."
+            )
+        detail = (
+            f"Расчет: остаток периода — **{surplus} ₸**; после неоплаченных счетов "
+            f"на **{bills} ₸** остается **{after_bills} ₸**; целевой резерв — "
+            f"**{reserve} ₸**."
+        )
+        cash_note = (
+            "Это расчетный запас по денежному потоку, а не подтвержденный баланс счета. "
+            "Фактический банковский баланс и отдельные накопления в демо-профиле неизвестны."
+        )
+        ewa_note = (
+            f"Доступная сумма EWA — **{ewa_available} ₸**: работодатель не настроил "
+            "политику досрочной выплаты. Это отдельный показатель, не банковский баланс."
+        )
+        fallback_note = "Показан серверный детерминированный расчет; AI-пояснение сейчас недоступно."
+        facts_text = [
+            f"Свободный запас после счетов и целевого резерва: {headroom} ₸.",
+            f"Доступная сумма EWA: {ewa_available} ₸.",
+            "Фактический банковский баланс в демо-профиле неизвестен.",
+        ]
+        limitations = [
+            "Фактический банковский баланс и отдельные накопления в демо-профиле не подтверждены.",
+            "Свободный запас рассчитан по данным демо-профиля и не является подтвержденными деньгами на счете.",
+            "EWA недоступен, поскольку работодатель не настроил политику досрочной выплаты.",
+        ]
+    else:
+        if int(analysis["purchase_headroom_minor"]) > 0:
+            lead = (
+                "Based on the demo profile, up to "
+                f"**{headroom} KZT** remains as planning headroom after upcoming bills "
+                "and the reserve target."
+            )
+        else:
+            lead = (
+                "Based on the demo profile, no planning headroom remains for additional "
+                "spending after upcoming bills and the reserve target."
+            )
+        detail = (
+            f"Calculation: period surplus is **{surplus} KZT**; after **{bills} KZT** "
+            f"in unpaid bills, **{after_bills} KZT** remains; the reserve target is "
+            f"**{reserve} KZT**."
+        )
+        cash_note = (
+            "This is a period cash-flow estimate, not a confirmed account balance. "
+            "Your actual bank balance and separate savings are unknown in the demo profile."
+        )
+        ewa_note = (
+            f"Available EWA is **{ewa_available} KZT** because the employer has not "
+            "configured an early-wage-access policy. This is separate from your bank balance."
+        )
+        fallback_note = (
+            "This is a server-side deterministic calculation; the AI explanation is currently unavailable."
+        )
+        facts_text = [
+            f"Planning headroom after bills and reserve: {headroom} KZT.",
+            f"Available EWA amount: {ewa_available} KZT.",
+            "Actual bank balance is not available in the demo profile.",
+        ]
+        limitations = [
+            "Actual bank balance and separate savings are not confirmed in the demo profile.",
+            "Planning headroom is calculated from demo data and is not confirmed cash in the account.",
+            "EWA is unavailable because the employer policy is not configured.",
+        ]
+
+    return CopilotAnswer(
+        response="\\n\\n".join((lead, detail, cash_note, ewa_note, fallback_note)),
+        key_facts=[
+            CopilotFact(code="available_amount", text=facts_text[0]),
+            CopilotFact(code="ewa_available_amount", text=facts_text[1]),
+            CopilotFact(code="bank_balance", text=facts_text[2]),
+        ],
+        data_limitations=limitations,
+        suggested_questions=(
+            DEFAULT_SUGGESTED_QUESTIONS_RU
+            if locale == "ru"
+            else DEFAULT_SUGGESTED_QUESTIONS_EN
+        ),
+        disclaimer=(
+            DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
+        ),
+        ai_metadata=CopilotMetadata(
+            generated=False,
+            fallback_used=True,
+            provider=None,
+            model=None,
+            fallback_reason=fallback_reason,
+        ),
+    )
+
+
 def _build_demo_purchase_fallback_answer(
     locale: str,
     fallback_reason: str,
@@ -474,8 +614,16 @@ def _build_demo_fallback_answer(
     fallback_reason: str,
     analysis: Optional[WithdrawalAnalysis] = None,
     purchase_analysis: Optional[dict[str, Any]] = None,
+    availability_question: bool = False,
 ) -> CopilotAnswer:
     """Build a deterministic fallback answer when the provider is unavailable."""
+    if availability_question:
+        if purchase_analysis is None:
+            purchase_analysis = asdict(evaluate_demo_purchase_affordability())
+        return _build_demo_available_funds_fallback_answer(
+            facts, locale, fallback_reason, purchase_analysis
+        )
+
     if purchase_analysis is not None:
         return _build_demo_purchase_fallback_answer(
             locale, fallback_reason, purchase_analysis
@@ -737,15 +885,20 @@ async def demo_chat_endpoint(
     purchase_analysis: Optional[dict[str, Any]] = None
     amount_minor = extract_hypothetical_amount_minor(message)
     purchase_affordability_question = is_purchase_affordability_question(message)
+    availability_question = _is_available_funds_question(message)
 
     if amount_minor is not None and is_withdrawal_question(message):
         ctx = build_demo_financial_context()
         affordability = evaluate_demo_affordability(amount_minor // 100)
         analysis = _build_demo_affordability_analysis(amount_minor // 100, affordability, ctx)
         facts = _build_demo_authoritative_facts(locale, analysis=analysis)
-    elif purchase_affordability_question and not is_withdrawal_question(message):
+    elif (
+        purchase_affordability_question or availability_question
+    ) and not is_withdrawal_question(message):
         purchase_analysis = asdict(
-            evaluate_demo_purchase_affordability(amount_minor)
+            evaluate_demo_purchase_affordability(
+                amount_minor if purchase_affordability_question else None
+            )
         )
 
     # Direct affordability questions with a supplied price do not need mock
@@ -820,6 +973,7 @@ async def demo_chat_endpoint(
             answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR,
             analysis,
             purchase_analysis,
+            availability_question=availability_question,
         )
         # Preserve provider/model attribution from the answer.
         fallback_answer.ai_metadata.provider = answer.ai_metadata.provider
