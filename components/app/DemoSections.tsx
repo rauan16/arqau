@@ -807,11 +807,19 @@ function DemoAiChat() {
   };
 
   const suggestedQuestions: Array<{ key: string; text: string }> = [
-    { key: "flight", text: locale === "ru" ? "Могу ли я купить авиабилет Алматы — Астана за 45 000 ₸?" : "Can I buy a flight Almaty — Astana for 45,000 ₸?" },
-    { key: "leftover", text: locale === "ru" ? "Сколько денег у меня останется после этой покупки?" : "How much money will I have left after this purchase?" },
-    { key: "bills", text: locale === "ru" ? "Какие обязательные платежи мне предстоят?" : "What upcoming mandatory payments do I have?" },
-    { key: "reserve", text: locale === "ru" ? "Сколько я могу потратить, чтобы сохранить резерв?" : "How much can I spend while keeping my reserve?" },
-    { key: "wait", text: locale === "ru" ? "Что лучше: купить сейчас или дождаться зарплаты?" : "Should I buy now or wait until payday?" },
+    { key: "macbook", text: locale === "ru" ? "Могу ли я позволить себе купить MacBook за 500 000 ₸?" : "Can I afford to buy a MacBook for 500,000 ₸?" },
+    { key: "after_purchase", text: locale === "ru" ? "Сколько средств останется после такой покупки?" : "How much would I have left after this purchase?" },
+    { key: "bills_after_purchase", text: locale === "ru" ? "Покрою ли я предстоящие счета после покупки?" : "Could I still cover my upcoming bills after buying it?" },
+    { key: "reserve", text: locale === "ru" ? "Сколько лучше оставить в резерве до зарплаты?" : "How much should I keep in reserve until payday?" },
+    { key: "wait", text: locale === "ru" ? "Стоит ли купить сейчас или подождать зарплаты?" : "Should I buy now or wait until payday?" },
+  ];
+
+  const contextQuestions: Array<{ key: string; text: string }> = [
+    { key: "available", text: locale === "ru" ? "Сколько денег мне сейчас доступно?" : "How much money do I have available?" },
+    { key: "earned", text: locale === "ru" ? "Сколько я заработал за этот месяц?" : "How much have I earned this month?" },
+    { key: "spend_now", text: locale === "ru" ? "Сколько я могу потратить прямо сейчас?" : "How much can I spend right now?" },
+    { key: "left_after_10000", text: locale === "ru" ? "Сколько денег останется, если я потрачу 10 000 ₸?" : "How much will I have left if I spend 10,000 KZT?" },
+    { key: "top_spending", text: locale === "ru" ? "На что я трачу больше всего денег?" : "What do I spend the most money on?" },
   ];
 
   const context = buildDemoFinancialContext(state, locale);
@@ -1168,27 +1176,51 @@ addMessage({
       )}
 
       {messages.length === 0 && (
-        <section className={panel}>
-          <div className="space-y-4">
-            <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.emptyChatTitle}</h2>
-            <p className="text-[14px] leading-relaxed text-ink-soft">{ai.emptyChatBody}</p>
-            <div className="mt-5 space-y-2">
-              <p className="text-[12px] font-semibold text-ink-soft">{ai.suggestedQuestions}</p>
-              <div className="flex flex-wrap gap-2">
-                {suggestedQuestions.map((q) => (
-                  <button
-                    key={q.key}
-                    type="button"
-                    onClick={() => handleSuggestedQuestion(q.text)}
-                    className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
-                  >
-                    {q.text}
-                  </button>
-                ))}
+        <>
+          <section className={panel}>
+            <div className="space-y-4">
+              <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.emptyChatTitle}</h2>
+              <p className="text-[14px] leading-relaxed text-ink-soft">{ai.emptyChatBody}</p>
+              <div className="mt-5 space-y-2">
+                <p className="text-[12px] font-semibold text-ink-soft">{ai.suggestedQuestions}</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedQuestions.map((q) => (
+                    <button
+                      key={q.key}
+                      type="button"
+                      onClick={() => handleSuggestedQuestion(q.text)}
+                      className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
+                    >
+                      {q.text}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section className={panel}>
+            <div className="space-y-4">
+              <h2 className="text-[16px] font-extrabold tracking-[-0.02em]">{ai.contextQuestionsTitle}</h2>
+              <p className="text-[14px] leading-relaxed text-ink-soft">{ai.contextQuestionsBody}</p>
+              <div className="mt-5 space-y-2">
+                <p className="text-[12px] font-semibold text-ink-soft">{ai.contextSuggestedQuestions}</p>
+                <div className="flex flex-wrap gap-2">
+                  {contextQuestions.map((q) => (
+                    <button
+                      key={q.key}
+                      type="button"
+                      onClick={() => handleSuggestedQuestion(q.text)}
+                      className="rounded-full border border-ink/[0.12] bg-cream px-3 py-2 text-[13px] outline-none transition-colors hover:border-orange/30 text-left"
+                    >
+                      {q.text}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
       )}
 
       <section className={panel}>
