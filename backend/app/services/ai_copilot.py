@@ -1047,6 +1047,9 @@ def build_sanitized_input(
         "income_amount_minor": None,
         "net_amount_minor": None,
         "product_search_results": product_search_results or [],
+        "upcoming_bills_total_minor": None,
+        "upcoming_bills_unpaid_minor": None,
+        "purchase_analysis": None,
     }
 
     if analysis is not None:

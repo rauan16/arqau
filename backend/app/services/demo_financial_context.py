@@ -383,10 +383,8 @@ def build_demo_sanitized_input(
         "net_amount_minor": ctx.net_amount * 100,
         "upcoming_bills_total_minor": ctx.upcoming_bills_total * 100,
         "upcoming_bills_unpaid_minor": ctx.upcoming_bills_unpaid_total * 100,
+        "purchase_analysis": purchase_analysis,
     }
-
-    if purchase_analysis is not None:
-        raw["purchase_analysis"] = purchase_analysis
 
     if analysis is not None:
         raw.update({
