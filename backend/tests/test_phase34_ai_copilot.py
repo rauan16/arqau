@@ -1420,10 +1420,26 @@ class TestO_GuardUnits(Phase34CopilotTestCase):
         self.assertIsNone(contains_fabricated_policy_claim("Your policy limit is 250000 minor units."))
 
     async def test_O6_message_builder_separates_roles(self) -> None:
-        messages = build_copilot_messages("hello", {"available_amount_minor": 1})
+        messages = build_copilot_messages(
+            "hello",
+            {
+                "available_amount_minor": 12_000_000,
+                "period_net_surplus_minor": 13_180_000,
+                "upcoming_bills_unpaid_minor": 5_740_000,
+                "top_spending_categories": [
+                    {"category": "Housing", "amount_minor": 4_500_000, "transaction_count": 1}
+                ],
+            },
+        )
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertEqual(messages[0]["content"], SYSTEM_PROMPT)
         self.assertIn("hello", messages[1]["content"])
+        # The provider receives a server-derived major-unit mirror so it does
+        # not have to calculate tiyin-to-KZT conversions itself.
+        self.assertIn('"available_amount_major": 120000', messages[1]["content"])
+        self.assertIn('"period_net_surplus_major": 131800', messages[1]["content"])
+        self.assertIn('"upcoming_bills_unpaid_major": 57400', messages[1]["content"])
+        self.assertIn('"amount_major": 45000', messages[1]["content"])
 
 
 # ---------------------------------------------------------------------------
@@ -1461,6 +1477,20 @@ class TestP351_CopilotProviderPolicy(unittest.IsolatedAsyncioTestCase):
         provider = OpenAICopilotProvider(api_key="sk-or-test", model="gpt-4o-mini")
         client = provider._get_client()
         self.assertEqual(str(client.base_url), "https://openrouter.ai/api/v1/")
+
+    def test_P5a_free_ling_model_keeps_json_schema_output_enabled(self) -> None:
+        provider = OpenAICopilotProvider(
+            api_key="sk-or-test",
+            model="inclusionai/ling-3.2-flash:free",
+        )
+        self.assertTrue(provider._supports_structured_output)
+
+    def test_P5b_unverified_free_models_do_not_assume_json_schema_support(self) -> None:
+        provider = OpenAICopilotProvider(
+            api_key="sk-or-test",
+            model="some-model:free",
+        )
+        self.assertFalse(provider._supports_structured_output)
 
     def test_P5_copilot_timeout_constant_is_structured(self) -> None:
         self.assertIsInstance(COPILOT_TIMEOUT, httpx.Timeout)

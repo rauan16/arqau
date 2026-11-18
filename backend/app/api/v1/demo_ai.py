@@ -17,6 +17,7 @@ never touches authenticated user data.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import re
 import hashlib
 import secrets
@@ -58,6 +59,7 @@ from app.services.demo_financial_context import (
     build_demo_financial_context,
     build_demo_sanitized_input,
     evaluate_demo_affordability,
+    evaluate_demo_purchase_affordability,
 )
 from app.schemas.ai import ChatRequest
 from app.schemas.ai_copilot import (
@@ -193,6 +195,8 @@ def _build_demo_authoritative_facts(
         period_net_surplus_minor=ctx.reserve_saved * 100,
         reserve_shortfall_minor=ctx.reserve_remaining * 100,
         reserve_progress_ratio=ctx.reserve_progress,
+        upcoming_bills_total_minor=ctx.upcoming_bills_total * 100,
+        upcoming_bills_unpaid_minor=ctx.upcoming_bills_unpaid_total * 100,
         eligible=False,
         eligibility_reasons=["NO_EWA_POLICY"],
         can_request_withdrawal=False,
@@ -278,13 +282,353 @@ def _build_demo_affordability_analysis(
     )
 
 
+def _format_demo_purchase_money(amount_minor: int, locale: str) -> str:
+    amount = amount_minor // 100
+    formatted = f"{amount:,}"
+    return formatted.replace(",", " ") if locale == "ru" else formatted
+
+
+def _is_available_funds_question(message: str) -> bool:
+    """Recognize direct questions about funds currently available to the user.
+
+    Keep this separate from EWA withdrawal intent: a generic available-money
+    question must not be answered with an EWA limit or a broad financial report.
+    """
+    normalized = re.sub(r"\s+", " ", (message or "").strip().lower())
+    patterns = (
+        r"\bhow much (?:money|cash|funds) do i have available\b",
+        r"\bhow much (?:money|cash|funds) (?:is )?available\b",
+        r"\bwhat (?:is|are) (?:my )?available (?:balance|funds|cash)\b",
+        r"\bwhat(?:'s| is) my available (?:balance|funds|cash)\b",
+        r"\bсколько у меня (?:есть )?(?:денег|средств) (?:сейчас )?(?:доступно|в наличии)\b",
+        r"\bсколько (?:денег|средств) (?:у меня )?(?:доступно|в наличии)\b",
+        r"\bкакой у меня доступный (?:баланс|остаток)\b",
+        r"\bкакой доступный (?:баланс|остаток)\b",
+    )
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _build_demo_available_funds_fallback_answer(
+    facts: Optional[AuthoritativeCopilotFacts],
+    locale: str,
+    fallback_reason: str,
+    analysis: dict[str, Any],
+) -> CopilotAnswer:
+    """Answer available-funds questions without conflating cash, headroom and EWA."""
+    if facts is None:
+        facts = _build_demo_authoritative_facts(locale)
+
+    fmt = lambda key: _format_demo_purchase_money(int(analysis[key]), locale)
+    surplus = fmt("period_surplus_minor")
+    bills = fmt("upcoming_bills_unpaid_minor")
+    after_bills = fmt("amount_after_bills_minor")
+    reserve = fmt("reserve_target_minor")
+    headroom = fmt("purchase_headroom_minor")
+    ewa_available = _format_demo_purchase_money(
+        facts.available_amount_minor or 0, locale
+    )
+
+    if locale == "ru":
+        if int(analysis["purchase_headroom_minor"]) > 0:
+            lead = (
+                f"По расчету демо-профиля после обязательных платежей и целевого резерва "
+                f"остается до **{headroom} ₸** свободного запаса."
+            )
+        else:
+            lead = (
+                "По расчету демо-профиля после обязательных платежей и целевого резерва "
+                "свободного запаса для дополнительных трат не остается."
+            )
+        detail = (
+            f"Расчет: остаток периода — **{surplus} ₸**; после неоплаченных счетов "
+            f"на **{bills} ₸** остается **{after_bills} ₸**; целевой резерв — "
+            f"**{reserve} ₸**."
+        )
+        cash_note = (
+            "Это расчетный запас по денежному потоку, а не подтвержденный баланс счета. "
+            "Фактический банковский баланс и отдельные накопления в демо-профиле неизвестны."
+        )
+        ewa_note = (
+            f"Доступная сумма EWA — **{ewa_available} ₸**: работодатель не настроил "
+            "политику досрочной выплаты. Это отдельный показатель, не банковский баланс."
+        )
+        fallback_note = "Показан серверный детерминированный расчет; AI-пояснение сейчас недоступно."
+        facts_text = [
+            f"Свободный запас после счетов и целевого резерва: {headroom} ₸.",
+            f"Доступная сумма EWA: {ewa_available} ₸.",
+            "Фактический банковский баланс в демо-профиле неизвестен.",
+        ]
+        limitations = [
+            "Фактический банковский баланс и отдельные накопления в демо-профиле не подтверждены.",
+            "Свободный запас рассчитан по данным демо-профиля и не является подтвержденными деньгами на счете.",
+            "EWA недоступен, поскольку работодатель не настроил политику досрочной выплаты.",
+        ]
+    else:
+        if int(analysis["purchase_headroom_minor"]) > 0:
+            lead = (
+                "Based on the demo profile, up to "
+                f"**{headroom} KZT** remains as planning headroom after upcoming bills "
+                "and the reserve target."
+            )
+        else:
+            lead = (
+                "Based on the demo profile, no planning headroom remains for additional "
+                "spending after upcoming bills and the reserve target."
+            )
+        detail = (
+            f"Calculation: period surplus is **{surplus} KZT**; after **{bills} KZT** "
+            f"in unpaid bills, **{after_bills} KZT** remains; the reserve target is "
+            f"**{reserve} KZT**."
+        )
+        cash_note = (
+            "This is a period cash-flow estimate, not a confirmed account balance. "
+            "Your actual bank balance and separate savings are unknown in the demo profile."
+        )
+        ewa_note = (
+            f"Available EWA is **{ewa_available} KZT** because the employer has not "
+            "configured an early-wage-access policy. This is separate from your bank balance."
+        )
+        fallback_note = (
+            "This is a server-side deterministic calculation; the AI explanation is currently unavailable."
+        )
+        facts_text = [
+            f"Planning headroom after bills and reserve: {headroom} KZT.",
+            f"Available EWA amount: {ewa_available} KZT.",
+            "Actual bank balance is not available in the demo profile.",
+        ]
+        limitations = [
+            "Actual bank balance and separate savings are not confirmed in the demo profile.",
+            "Planning headroom is calculated from demo data and is not confirmed cash in the account.",
+            "EWA is unavailable because the employer policy is not configured.",
+        ]
+
+    return CopilotAnswer(
+        response="\n\n".join((lead, detail, cash_note, ewa_note, fallback_note)),
+        key_facts=[
+            CopilotFact(code="available_amount", text=facts_text[0]),
+            CopilotFact(code="ewa_available_amount", text=facts_text[1]),
+            CopilotFact(code="bank_balance", text=facts_text[2]),
+        ],
+        data_limitations=limitations,
+        suggested_questions=(
+            DEFAULT_SUGGESTED_QUESTIONS_RU
+            if locale == "ru"
+            else DEFAULT_SUGGESTED_QUESTIONS_EN
+        ),
+        disclaimer=(
+            DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
+        ),
+        ai_metadata=CopilotMetadata(
+            generated=False,
+            fallback_used=True,
+            provider=None,
+            model=None,
+            fallback_reason=fallback_reason,
+        ),
+    )
+
+
+def _build_demo_purchase_fallback_answer(
+    locale: str,
+    fallback_reason: str,
+    purchase_analysis: dict[str, Any],
+) -> CopilotAnswer:
+    """Build a direct deterministic answer from the server-side purchase calculation."""
+    fmt = lambda key: _format_demo_purchase_money(int(purchase_analysis[key]), locale)
+
+    purchase_minor = purchase_analysis.get("purchase_amount_minor")
+    surplus = fmt("period_surplus_minor")
+    bills = fmt("upcoming_bills_unpaid_minor")
+    after_bills = fmt("amount_after_bills_minor")
+    reserve = fmt("reserve_target_minor")
+    headroom = fmt("purchase_headroom_minor")
+
+    if purchase_minor is None:
+        if locale == "ru":
+            lead = (
+                f"По денежному потоку демо-профиля на покупку остается до **{headroom} ₸** "
+                "после учета обязательных платежей и целевого резерва."
+            )
+            detail = (
+                f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                f"на **{bills} ₸** остается **{after_bills} ₸**; целевой резерв — "
+                f"**{reserve} ₸**."
+            )
+            follow_up = "Для оценки конкретной покупки нужна ее цена."
+            limitation = (
+                "Это оценка по денежному потоку, а не подтвержденные деньги на счете. "
+                "Фактический банковский баланс и накопления неизвестны."
+            )
+            fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+        else:
+            lead = (
+                f"The demo profile leaves up to **{headroom} KZT** for a purchase "
+                "after upcoming bills and the reserve target are accounted for."
+            )
+            detail = (
+                f"The period-surplus indicator is **{surplus} KZT**. After "
+                f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains "
+                f"before preserving the **{reserve} KZT** reserve target."
+            )
+            follow_up = "Share the purchase price to assess that specific item."
+            limitation = (
+                "This is a period-flow estimate, not confirmed cash in your account. "
+                "Your actual bank balance and savings are unknown."
+            )
+            fallback_note = (
+                "This is the server-calculated estimate; the AI explanation is currently unavailable."
+            )
+        response = "\n\n".join((lead, detail, follow_up, fallback_note))
+    else:
+        purchase = _format_demo_purchase_money(int(purchase_minor), locale)
+        if purchase_analysis.get("fits_period_buffer"):
+            remaining = fmt("remaining_after_purchase_and_bills_minor")
+            if locale == "ru":
+                lead = (
+                    f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
+                    "укладывается в запас после оплаты предстоящих счетов и сохранения целевого резерва."
+                )
+                detail = (
+                    f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                    f"на **{bills} ₸** и покупки расчетный остаток составит **{remaining} ₸**, "
+                    f"при целевом резерве **{reserve} ₸**."
+                )
+                limitation = (
+                    "Это оценка денежного потока, а не подтвержденные деньги на счете. "
+                    "Фактический банковский баланс и отдельные накопления неизвестны."
+                )
+                fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+            else:
+                lead = (
+                    f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
+                    "purchase fits after covering upcoming bills and preserving the reserve target."
+                )
+                detail = (
+                    f"The period-surplus indicator is **{surplus} KZT**. After "
+                    f"**{bills} KZT** in unpaid bills and this purchase, the calculated "
+                    f"remainder is **{remaining} KZT**, with a **{reserve} KZT** reserve target."
+                )
+                limitation = (
+                    "This is a cash-flow estimate, not confirmed money in your account. "
+                    "Your actual bank balance and separate savings are unknown."
+                )
+                fallback_note = (
+                    "This is the server-calculated estimate; the AI explanation is currently unavailable."
+                )
+            response = "\n\n".join((lead, detail, fallback_note))
+        else:
+            shortfall = fmt("shortfall_minor")
+            if locale == "ru":
+                lead = (
+                    f"По расчету денежного потока демо-профиля покупка за **{purchase} ₸** "
+                    "не укладывается в запас после оплаты предстоящих счетов и сохранения резерва."
+                )
+                detail = (
+                    f"Остаток периода — **{surplus} ₸**. После неоплаченных счетов "
+                    f"на **{bills} ₸** остается **{after_bills} ₸**. Если сохранить "
+                    f"целевой резерв **{reserve} ₸**, на покупку остается до **{headroom} ₸**."
+                )
+                gap = (
+                    f"Покупка превышает этот запас на **{shortfall} ₸**. "
+                    "Это оценка демо-денежного потока, а не проверка банковского счета."
+                )
+                limitation = (
+                    "Фактический баланс и накопления на банковском счете неизвестны. "
+                    "Отдельные сбережения, не отраженные в демо-профиле, могут изменить вывод."
+                )
+                fallback_note = "Показан серверный расчет: AI-пояснение сейчас недоступно."
+            else:
+                lead = (
+                    f"Based on the demo profile's period cash-flow estimate, a **{purchase} KZT** "
+                    "purchase does not fit while covering upcoming bills and preserving the reserve."
+                )
+                detail = (
+                    f"The period-surplus indicator is **{surplus} KZT**. After "
+                    f"**{bills} KZT** in unpaid bills, **{after_bills} KZT** remains. "
+                    f"Preserving the **{reserve} KZT** reserve target leaves up to "
+                    f"**{headroom} KZT** for the purchase."
+                )
+                gap = (
+                    f"The purchase exceeds that buffer by **{shortfall} KZT**. "
+                    "This is a demo cash-flow estimate, not a check of your bank account."
+                )
+                limitation = (
+                    "The actual bank balance and savings are unknown. Separate savings "
+                    "not represented in the demo profile could change the conclusion."
+                )
+                fallback_note = (
+                    "This is the server-calculated estimate; the AI explanation is currently unavailable."
+                )
+            response = "\n\n".join((lead, detail, gap, fallback_note))
+
+    return CopilotAnswer(
+        response=response,
+        key_facts=[
+            CopilotFact(
+                code="surplus_summary",
+                text=(
+                    f"Показатель остатка периода: {surplus} ₸."
+                    if locale == "ru"
+                    else f"Period-surplus indicator: {surplus} KZT."
+                ),
+            ),
+            CopilotFact(
+                code="upcoming_bills",
+                text=(
+                    f"Неоплаченные обязательные платежи: {bills} ₸."
+                    if locale == "ru"
+                    else f"Unpaid upcoming bills: {bills} KZT."
+                ),
+            ),
+            CopilotFact(
+                code="reserve_target",
+                text=(
+                    f"Целевой резерв: {reserve} ₸."
+                    if locale == "ru"
+                    else f"Reserve target: {reserve} KZT."
+                ),
+            ),
+        ],
+        data_limitations=[limitation],
+        suggested_questions=(
+            DEFAULT_SUGGESTED_QUESTIONS_RU
+            if locale == "ru"
+            else DEFAULT_SUGGESTED_QUESTIONS_EN
+        ),
+        disclaimer=(
+            DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
+        ),
+        ai_metadata=CopilotMetadata(
+            generated=False,
+            fallback_used=True,
+            provider=None,
+            model=None,
+            fallback_reason=fallback_reason,
+        ),
+    )
+
+
 def _build_demo_fallback_answer(
     facts: Optional[AuthoritativeCopilotFacts],
     locale: str,
     fallback_reason: str,
     analysis: Optional[WithdrawalAnalysis] = None,
+    purchase_analysis: Optional[dict[str, Any]] = None,
+    availability_question: bool = False,
 ) -> CopilotAnswer:
     """Build a deterministic fallback answer when the provider is unavailable."""
+    if availability_question:
+        if purchase_analysis is None:
+            purchase_analysis = asdict(evaluate_demo_purchase_affordability())
+        return _build_demo_available_funds_fallback_answer(
+            facts, locale, fallback_reason, purchase_analysis
+        )
+
+    if purchase_analysis is not None:
+        return _build_demo_purchase_fallback_answer(
+            locale, fallback_reason, purchase_analysis
+        )
+
     disclaimer = DEFAULT_DISCLAIMER_RU if locale == "ru" else DEFAULT_DISCLAIMER_EN
     ctx = build_demo_financial_context()
 
@@ -304,40 +648,61 @@ def _build_demo_fallback_answer(
         intro = _fallback_reason_text(fallback_reason, locale)
 
     ewa_available_kzt = facts.available_amount_minor // 100
+    reserve_delta = ctx.reserve_saved - ctx.reserve_target
+    surplus_after_bills = ctx.reserve_saved - ctx.upcoming_bills_unpaid_total
+    planning_headroom = surplus_after_bills - ctx.reserve_target
+
+    # The progress indicator is intentionally capped at 100%, but a text
+    # summary must not label a larger surplus/target ratio as exactly 100%.
+    if reserve_delta > 0:
+        reserve_status_en = f"surplus exceeds the target by {reserve_delta} KZT"
+        reserve_status_ru = f"остаток превышает целевой резерв на {reserve_delta} ₸"
+    elif reserve_delta < 0:
+        reserve_status_en = f"surplus is {abs(reserve_delta)} KZT below the target"
+        reserve_status_ru = f"остаток ниже целевого резерва на {abs(reserve_delta)} ₸"
+    else:
+        reserve_status_en = "surplus exactly meets the target"
+        reserve_status_ru = "остаток в точности достигает целевого резерва"
+
+    if planning_headroom >= 0:
+        bill_impact_en = (
+            f"After {ctx.upcoming_bills_unpaid_total} KZT in unpaid upcoming bills, "
+            f"the calculated remainder is {surplus_after_bills} KZT; "
+            f"after setting aside the {ctx.reserve_target} KZT reserve target, "
+            f"planning headroom is {planning_headroom} KZT."
+        )
+        bill_impact_ru = (
+            f"После учета обязательных платежей на {ctx.upcoming_bills_unpaid_total} ₸ "
+            f"расчетный остаток составляет {surplus_after_bills} ₸; "
+            f"после выделения целевого резерва {ctx.reserve_target} ₸ "
+            f"планируемый запас составляет {planning_headroom} ₸."
+        )
+    else:
+        bill_impact_en = (
+            f"After {ctx.upcoming_bills_unpaid_total} KZT in unpaid upcoming bills, "
+            f"the calculated remainder is {surplus_after_bills} KZT, "
+            f"which is {abs(planning_headroom)} KZT below the reserve target."
+        )
+        bill_impact_ru = (
+            f"После учета обязательных платежей на {ctx.upcoming_bills_unpaid_total} ₸ "
+            f"расчетный остаток составляет {surplus_after_bills} ₸, "
+            f"что на {abs(planning_headroom)} ₸ ниже целевого резерва."
+        )
 
     # --- Lead with the answer (system prompt §1) ---
-    # Single short conclusion + key number in bold
+    # State the actual difference from the target, not the capped UI progress.
     if locale == "ru":
         lead = (
             f"Финансовый обзор: за период заработано **{facts.earned_amount_minor // 100} ₸**, "
-            f"потрачено **{ctx.expense_amount} ₸**, остаток period surplus — **{ctx.reserve_saved} ₸** "
-            f"из целевого резерва **{ctx.reserve_target} ₸** (100%)."
+            f"потрачено **{ctx.expense_amount} ₸**, остаток периода — **{ctx.reserve_saved} ₸**. "
+            f"Целевой резерв — **{ctx.reserve_target} ₸**; {reserve_status_ru}."
         )
     else:
         lead = (
             f"Financial overview: earned this period **{facts.earned_amount_minor // 100} KZT**, "
-            f"expenses **{ctx.expense_amount} KZT**, period surplus **{ctx.reserve_saved} KZT** "
-            f"of reserve target **{ctx.reserve_target} KZT** (100%)."
+            f"expenses **{ctx.expense_amount} KZT**, period surplus **{ctx.reserve_saved} KZT**. "
+            f"Reserve target is **{ctx.reserve_target} KZT**; {reserve_status_en}."
         )
-
-    # --- Key metrics (system prompt §2: compact table with relevant indicators) ---
-    # Use structured concise paragraphs; one paragraph per idea
-    metrics_ru = (
-        f"**Period surplus:** {ctx.reserve_saved} ₸ of **{ctx.reserve_target} ₸** reserve target ({int(ctx.reserve_progress * 100)}%). "
-        f"This is earned minus spent, not confirmed bank savings. "
-        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
-        f"**EWA capacity:** {ewa_available_kzt} ₸ (deterministic limit; no EWA policy configured). "
-        f"**Expenses this period:** {ctx.expense_amount} ₸ (Housing {ctx.expense_amount_Housing if hasattr(ctx, 'expense_amount_Housing') else ''}₸, "
-        f"Food {ctx.expense_amount_Food if hasattr(ctx, 'expense_amount_Food') else ''}₸, "
-        f"Transport {ctx.expense_amount_Transport if hasattr(ctx, 'expense_amount_Transport') else ''}₸)."
-    )
-    metrics_en = (
-        f"**Period surplus:** {ctx.reserve_saved} KZT of **{ctx.reserve_target} KZT** reserve target ({int(ctx.reserve_progress * 100)}%). "
-        f"This is earned minus spent, not confirmed bank savings. "
-        f"100% means the surplus meets or exceeds the target, not that savings are confirmed. "
-        f"**EWA capacity:** {ewa_available_kzt} KZT (deterministic limit; no EWA policy configured). "
-        f"**Expenses this period:** {ctx.expense_amount} KZT (Housing, Food, Transport)."
-    )
 
     # --- Analysis & status (system prompt §2 order: analysis, then status/limitation) ---
     parts = [lead]
@@ -358,77 +723,78 @@ def _build_demo_fallback_answer(
     # EWA education (system prompt §6): explain EWA, role of employer/employee, policy controls
     if locale == "ru":
         ewa_edu = (
-            f"EWA (EARned wage access) — это możliwoсть получить часть зарплаты до дня выплаты. "
-            f"Политика EWA настраивает работодатель. Сейчас для вашего работодателя "
-            f"EWA-политика не настроена, поэтому досрочное получение недоступно. "
-            f"Оставшийся лимит EWA — **{ewa_available_kzt} ₸** — это способность системы, "
-            f"а не рекомендация или баланс на счете."
+            f"EWA (Earned Wage Access) — возможность получить часть заработанной зарплаты до дня выплаты. "
+            f"Политику EWA настраивает работодатель. Для вашего работодателя она пока не настроена, "
+            f"поэтому досрочное получение зарплаты недоступно. "
+            f"Доступная сумма EWA сейчас — **{ewa_available_kzt} ₸**. "
+            f"Это доступ к досрочной выплате, а не баланс банковского счета."
         )
     else:
         ewa_edu = (
-            f"EWA (Earned Wage Access) — the ability to access a portion of earned wages before "
-            f"payday. The EWA policy is configured by the employer. For your employer, "
-            f"the EWA policy is not currently configured, so early access is unavailable. "
-            f"The remaining EWA limit **{ewa_available_kzt} KZT** is the system's capability, "
-            f"not a recommendation or account balance."
+            f"EWA (Earned Wage Access) lets employees access part of their earned wages before payday. "
+            f"Your employer has not configured an EWA policy, so early wage access is unavailable. "
+            f"The available EWA amount is **{ewa_available_kzt} KZT**. "
+            f"This is an early-access limit, not your bank-account balance."
         )
     parts.append(ewa_edu)
 
 # Recommendations (system prompt §5: 2-3 specific, actionable recommendations)
     if locale == "ru":
         rec1 = (
-            f"1. Проверьте, настроена ли EWA-политика у вашего работодателя — "
-            f"без этого досрочного доступа к зарплате не будет доступно."
+            "1. Уточните у HR или payroll-администратора работодателя, планируется ли "
+            "настройка EWA-политики. Пока она не настроена, досрочное получение зарплаты недоступно."
         )
         rec2 = (
-            f"2. Учитывайте, что period surplus {ctx.reserve_saved} ₸ из {ctx.reserve_target} ₸ "
-            f"(100%) — это остаток периода, а не гарантированные накопления на банковском счете. "
-            f"До тех пор пока резерв не подтвержден."
+            f"2. Остаток периода — это расчетная разница доходов и расходов, "
+            f"а не подтвержденные накопления. Фактический баланс банковского счета неизвестен."
         )
         rec3 = (
-            f"3. Обязательные платежи перед зарплатой ({ctx.upcoming_bills_unpaid_total} ₸) "
-            f"могут сказаться на доступных средствах. Рекомендуется сохранить резерв untouched "
-            f"перед следующей зарплатой."
+            f"3. {bill_impact_ru} Это расчет по данным демо-профиля, "
+            f"а не подтверждение наличия денег на счете."
         )
     else:
         rec1 = (
-            f"1. Check if your employer has an EWA policy configured — without it, "
-            f"early wage access will not be available."
+            "1. Ask your employer's HR or payroll administrator whether an EWA policy "
+            "will be configured. Until then, early wage access is unavailable."
         )
         rec2 = (
-            f"2. Note that the period surplus {ctx.reserve_saved} KZT of {ctx.reserve_target} KZT "
-            f"(100%) is period remainder, not guaranteed funds in a bank account. "
-            f"Actual bank savings are not confirmed."
+            "2. The period surplus is a calculated difference between earnings and expenses, "
+            "not confirmed savings. The actual bank balance is unknown."
         )
         rec3 = (
-            f"3. Upcoming mandatory payments before payday ({ctx.upcoming_bills_unpaid_total} KZT) "
-            f"may affect available funds. It is recommended to keep the reserve untouched "
-            f"until the next payday."
+            f"3. {bill_impact_en} This is a demo-profile cash-flow calculation, "
+            f"not confirmation that the money is in your account."
         )
     parts.append(rec1)
     parts.append(rec2)
     parts.append(rec3)
 
     # --- Limitation (system prompt §2: status/limitation section) ---
-    parts.append(
-        f"Limitation: reserve progress ratio of 100% reflects period surplus (earned − expenses), "
-        f"not accumulated savings. Actual bank balance and savings are not confirmed."
-    )
+    if locale == "ru":
+        parts.append(
+            f"Ограничение: достижение целевого резерва рассчитано по остатку периода "
+            f"и не подтверждает фактические накопления или баланс банковского счета."
+        )
+    else:
+        parts.append(
+            "Limitation: reserve-target coverage is calculated from period surplus; "
+            "it does not confirm actual savings or a bank-account balance."
+        )
 
     # --- Key facts (system prompt §3: keep tables independent, one per heading) ---
     key_facts = [
         CopilotFact(
             code="available_amount",
             text=(
-                f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
+                f"Доступная сумма EWA: {ewa_available_kzt} ₸; работодатель не настроил EWA-политику."
                 if locale == "ru"
-                else f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
+                else f"Available EWA amount: {ewa_available_kzt} KZT; employer EWA policy is not configured."
             ),
         ),
         CopilotFact(
             code="earned_amount",
             text=(
-                f"Earned: {facts.earned_amount_minor // 100} KZT."
+                f"Заработано: {facts.earned_amount_minor // 100} ₸."
                 if locale == "ru"
                 else f"Earned: {facts.earned_amount_minor // 100} KZT."
             ),
@@ -436,7 +802,7 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="reserve_target",
             text=(
-                f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
+                f"Целевой резерв: {ctx.reserve_target} ₸, остаток за период: {ctx.reserve_saved} ₸."
                 if locale == "ru"
                 else f"Reserve target: {ctx.reserve_target} KZT, period surplus: {ctx.reserve_saved} KZT."
             ),
@@ -444,7 +810,7 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="days_to_payday",
             text=(
-                f"Days to payday: {ctx.days_to_payday}."
+                f"Дней до зарплаты: {ctx.days_to_payday}."
                 if locale == "ru"
                 else f"Days to payday: {ctx.days_to_payday}."
             ),
@@ -455,8 +821,8 @@ def _build_demo_fallback_answer(
         response="\n\n".join(parts),
         key_facts=key_facts,
         data_limitations=[
-            "Reserve progress 100% reflects period surplus, not confirmed savings.",
-            "EWA availability is deterministic capacity, not a recommended withdrawal amount.",
+            "Reserve-target coverage is calculated from period surplus, not confirmed savings.",
+            "EWA is unavailable because the employer policy is not configured.",
             "Actual bank balance and savings are not confirmed.",
         ],
         suggested_questions=DEFAULT_SUGGESTED_QUESTIONS_RU if locale == "ru" else DEFAULT_SUGGESTED_QUESTIONS_EN,
@@ -514,17 +880,26 @@ async def demo_chat_endpoint(
     # Build authoritative facts from trusted server-side demo context.
     facts = _build_demo_authoritative_facts(locale)
 
-    # Optionally analyse a hypothetical withdrawal/purchase amount.
+    # Withdrawal and purchase affordability are separate server-side scenarios.
     analysis: Optional[WithdrawalAnalysis] = None
+    purchase_analysis: Optional[dict[str, Any]] = None
     amount_minor = extract_hypothetical_amount_minor(message)
     purchase_affordability_question = is_purchase_affordability_question(message)
-    # The EWA withdrawal evaluator is only for wage-access questions. A product
-    # purchase is a separate scenario: do not treat the EWA limit as cash.
+    availability_question = _is_available_funds_question(message)
+
     if amount_minor is not None and is_withdrawal_question(message):
         ctx = build_demo_financial_context()
         affordability = evaluate_demo_affordability(amount_minor // 100)
         analysis = _build_demo_affordability_analysis(amount_minor // 100, affordability, ctx)
         facts = _build_demo_authoritative_facts(locale, analysis=analysis)
+    elif (
+        purchase_affordability_question or availability_question
+    ) and not is_withdrawal_question(message):
+        purchase_analysis = asdict(
+            evaluate_demo_purchase_affordability(
+                amount_minor if purchase_affordability_question else None
+            )
+        )
 
     # Direct affordability questions with a supplied price do not need mock
     # catalogue offers. Keep product lookup for explicit shopping searches.
@@ -564,6 +939,7 @@ async def demo_chat_endpoint(
             "share_of_earned": (analysis.impact.requested_share_of_earned_bps or 0) / 10000 if analysis else 0,
             "status": "comfortable" if analysis and analysis.requestability.requestable else "caution",
         } if analysis else None,
+        purchase_analysis=purchase_analysis,
     )
     # Add product search results if available (not part of analysis)
     if product_search_results:
@@ -581,6 +957,7 @@ async def demo_chat_endpoint(
         user_message=message,
         user_id=DEMO_USER_ID,
         analysis=analysis,
+        purchase_analysis=purchase_analysis,
     )
 
     # Override locale-specific fields that `generate_copilot_answer` sets to
@@ -590,7 +967,14 @@ async def demo_chat_endpoint(
 
     # Build a locale-aware fallback answer when the provider was unavailable.
     if answer.ai_metadata.fallback_used:
-        fallback_answer = _build_demo_fallback_answer(facts, locale, answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR, analysis)
+        fallback_answer = _build_demo_fallback_answer(
+            facts,
+            locale,
+            answer.ai_metadata.fallback_reason or FALLBACK_HTTP_ERROR,
+            analysis,
+            purchase_analysis,
+            availability_question=availability_question,
+        )
         # Preserve provider/model attribution from the answer.
         fallback_answer.ai_metadata.provider = answer.ai_metadata.provider
         fallback_answer.ai_metadata.model = answer.ai_metadata.model
