@@ -500,20 +500,60 @@ def _build_demo_fallback_answer(
         intro = _fallback_reason_text(fallback_reason, locale)
 
     ewa_available_kzt = facts.available_amount_minor // 100
+    reserve_delta = ctx.reserve_saved - ctx.reserve_target
+    surplus_after_bills = ctx.reserve_saved - ctx.upcoming_bills_unpaid_total
+    planning_headroom = surplus_after_bills - ctx.reserve_target
+
+    # The progress indicator is intentionally capped at 100%, but a text
+    # summary must not label a larger surplus/target ratio as exactly 100%.
+    if reserve_delta > 0:
+        reserve_status_en = f"surplus exceeds the target by {reserve_delta} KZT"
+        reserve_status_ru = f"остаток превышает целевой резерв на {reserve_delta} ₸"
+    elif reserve_delta < 0:
+        reserve_status_en = f"surplus is {abs(reserve_delta)} KZT below the target"
+        reserve_status_ru = f"остаток ниже целевого резерва на {abs(reserve_delta)} ₸"
+    else:
+        reserve_status_en = "surplus exactly meets the target"
+        reserve_status_ru = "остаток в точности достигает целевого резерва"
+
+    if planning_headroom >= 0:
+        bill_impact_en = (
+            f"After {ctx.upcoming_bills_unpaid_total} KZT in unpaid upcoming bills, "
+            f"the calculated remainder is {surplus_after_bills} KZT; "
+            f"after setting aside the {ctx.reserve_target} KZT reserve target, "
+            f"planning headroom is {planning_headroom} KZT."
+        )
+        bill_impact_ru = (
+            f"После учета обязательных платежей на {ctx.upcoming_bills_unpaid_total} ₸ "
+            f"расчетный остаток составляет {surplus_after_bills} ₸; "
+            f"после выделения целевого резерва {ctx.reserve_target} ₸ "
+            f"планируемый запас составляет {planning_headroom} ₸."
+        )
+    else:
+        bill_impact_en = (
+            f"After {ctx.upcoming_bills_unpaid_total} KZT in unpaid upcoming bills, "
+            f"the calculated remainder is {surplus_after_bills} KZT, "
+            f"which is {abs(planning_headroom)} KZT below the reserve target."
+        )
+        bill_impact_ru = (
+            f"После учета обязательных платежей на {ctx.upcoming_bills_unpaid_total} ₸ "
+            f"расчетный остаток составляет {surplus_after_bills} ₸, "
+            f"что на {abs(planning_headroom)} ₸ ниже целевого резерва."
+        )
 
     # --- Lead with the answer (system prompt §1) ---
-    # Single short conclusion + key number in bold
+    # State the actual difference from the target, not the capped UI progress.
     if locale == "ru":
         lead = (
             f"Финансовый обзор: за период заработано **{facts.earned_amount_minor // 100} ₸**, "
-            f"потрачено **{ctx.expense_amount} ₸**, остаток period surplus — **{ctx.reserve_saved} ₸** "
-            f"из целевого резерва **{ctx.reserve_target} ₸** (100%)."
+            f"потрачено **{ctx.expense_amount} ₸**, остаток периода — **{ctx.reserve_saved} ₸**. "
+            f"Целевой резерв — **{ctx.reserve_target} ₸**; {reserve_status_ru}."
         )
     else:
         lead = (
             f"Financial overview: earned this period **{facts.earned_amount_minor // 100} KZT**, "
-            f"expenses **{ctx.expense_amount} KZT**, period surplus **{ctx.reserve_saved} KZT** "
-            f"of reserve target **{ctx.reserve_target} KZT** (100%)."
+            f"expenses **{ctx.expense_amount} KZT**, period surplus **{ctx.reserve_saved} KZT**. "
+            f"Reserve target is **{ctx.reserve_target} KZT**; {reserve_status_en}."
         )
 
     # --- Key metrics (system prompt §2: compact table with relevant indicators) ---
@@ -573,33 +613,29 @@ def _build_demo_fallback_answer(
 # Recommendations (system prompt §5: 2-3 specific, actionable recommendations)
     if locale == "ru":
         rec1 = (
-            f"1. Проверьте, настроена ли EWA-политика у вашего работодателя — "
-            f"без нее досрочное получение зарплаты будет недоступно."
+            "1. Уточните у HR или payroll-администратора работодателя, планируется ли "
+            "настройка EWA-политики. Пока она не настроена, досрочное получение зарплаты недоступно."
         )
         rec2 = (
-            f"2. Учитывайте, что period surplus {ctx.reserve_saved} ₸ из {ctx.reserve_target} ₸ "
-            f"(100%) — это остаток периода, а не подтвержденные накопления на банковском счете. "
-            f"Фактический баланс и размер сбережений неизвестны."
+            f"2. Остаток периода — это расчетная разница доходов и расходов, "
+            f"а не подтвержденные накопления. Фактический баланс банковского счета неизвестен."
         )
         rec3 = (
-            f"3. Обязательные платежи перед зарплатой ({ctx.upcoming_bills_unpaid_total} ₸) "
-            f"могут уменьшить сумму, которая останется до следующей зарплаты. По возможности "
-            f"не используйте деньги, которые планируете оставить в резерве."
+            f"3. {bill_impact_ru} Это расчет по данным демо-профиля, "
+            f"а не подтверждение наличия денег на счете."
         )
     else:
         rec1 = (
-            f"1. Check if your employer has an EWA policy configured — without it, "
-            f"early wage access will not be available."
+            "1. Ask your employer's HR or payroll administrator whether an EWA policy "
+            "will be configured. Until then, early wage access is unavailable."
         )
         rec2 = (
-            f"2. Note that the period surplus {ctx.reserve_saved} KZT of {ctx.reserve_target} KZT "
-            f"(100%) is period remainder, not guaranteed funds in a bank account. "
-            f"Actual bank savings are not confirmed."
+            "2. The period surplus is a calculated difference between earnings and expenses, "
+            "not confirmed savings. The actual bank balance is unknown."
         )
         rec3 = (
-            f"3. Upcoming mandatory payments before payday ({ctx.upcoming_bills_unpaid_total} KZT) "
-            f"may affect available funds. It is recommended to keep the reserve untouched "
-            f"until the next payday."
+            f"3. {bill_impact_en} This is a demo-profile cash-flow calculation, "
+            f"not confirmation that the money is in your account."
         )
     parts.append(rec1)
     parts.append(rec2)
@@ -608,13 +644,13 @@ def _build_demo_fallback_answer(
     # --- Limitation (system prompt §2: status/limitation section) ---
     if locale == "ru":
         parts.append(
-            "Важно: показатель резерва 100% рассчитан по разнице доходов и расходов. "
-            "Он не подтверждает наличие такой суммы на банковском счете."
+            f"Ограничение: достижение целевого резерва рассчитано по остатку периода "
+            f"и не подтверждает фактические накопления или баланс банковского счета."
         )
     else:
         parts.append(
-            "Limitation: 100% reserve progress reflects period surplus (earned minus expenses), "
-            "not confirmed savings. Actual bank balance is unknown."
+            "Limitation: reserve-target coverage is calculated from period surplus; "
+            "it does not confirm actual savings or a bank-account balance."
         )
 
     # --- Key facts (system prompt §3: keep tables independent, one per heading) ---
@@ -622,9 +658,9 @@ def _build_demo_fallback_answer(
         CopilotFact(
             code="available_amount",
             text=(
-                f"Доступный лимит: {ewa_available_kzt} ₸ (емкость EWA, не рекомендация по снятию)."
+                f"Доступная сумма EWA: {ewa_available_kzt} ₸; работодатель не настроил EWA-политику."
                 if locale == "ru"
-                else f"Available: {ewa_available_kzt} KZT (EWA capacity, not a recommendation)."
+                else f"Available EWA amount: {ewa_available_kzt} KZT; employer EWA policy is not configured."
             ),
         ),
         CopilotFact(
@@ -657,8 +693,8 @@ def _build_demo_fallback_answer(
         response="\n\n".join(parts),
         key_facts=key_facts,
         data_limitations=[
-            "Reserve progress 100% reflects period surplus, not confirmed savings.",
-            "EWA availability is deterministic capacity, not a recommended withdrawal amount.",
+            "Reserve-target coverage is calculated from period surplus, not confirmed savings.",
+            "EWA is unavailable because the employer policy is not configured.",
             "Actual bank balance and savings are not confirmed.",
         ],
         suggested_questions=DEFAULT_SUGGESTED_QUESTIONS_RU if locale == "ru" else DEFAULT_SUGGESTED_QUESTIONS_EN,
