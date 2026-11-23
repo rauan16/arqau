@@ -192,12 +192,12 @@ def reset_demo_ai_limiter() -> None:
     _DEMO_AI_LIMITER.reset()
 
 
-async def enforce_demo_ai_rate_limit(request: Request) -> None:
-    """Enforce IP-based rate limit for the public demo AI chat.
+async def enforce_demo_ai_rate_limit(request: Request) -> str:
+    """Enforce the public demo AI request limit and return its client key.
 
-    Raises HTTP 429 with Retry-After when the per-IP ceiling is exceeded.
-    Checked before any provider call, so the LLM budget is never consumed by
-    a rate-limited request.
+    The returned key is also used for the provider-call budget, so anonymous
+    visitors do not all consume one shared global demo-user allowance.
+    Raises HTTP 429 with Retry-After before any provider call when exceeded.
     """
     client_ip = await get_client_ip(request)
     limiter = get_demo_ai_limiter()
@@ -208,3 +208,4 @@ async def enforce_demo_ai_rate_limit(request: Request) -> None:
             detail="Too many demo AI requests. Please try again later.",
             headers={"Retry-After": str(int(retry_after) + 1)},
         )
+    return client_ip
