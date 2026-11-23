@@ -83,7 +83,6 @@ from app.schemas.financial_context import (
 router = APIRouter(prefix="/demo/ai", tags=["demo-ai"])
 
 MAX_MESSAGE_CHARS = 2000
-DEMO_USER_ID = "demo"
 
 # Conversation state (in-memory for demo; in production would use persistent storage)
 # Maps conversation_id to {"token": str, "messages": [{"role": "user"|"assistant", "content": str}]}
@@ -856,7 +855,7 @@ def _get_demo_transport_expense() -> int:
 async def demo_chat_endpoint(
     request: ChatRequest,
     provider: CopilotProvider = Depends(get_copilot_provider),
-    _rate_limit: None = Depends(enforce_demo_ai_rate_limit),
+    client_ip: str = Depends(enforce_demo_ai_rate_limit),
 ) -> CopilotResponse:
     """Public demo AI chat. No authentication required.
 
@@ -955,7 +954,9 @@ async def demo_chat_endpoint(
         payload=payload,
         facts=facts,
         user_message=message,
-        user_id=DEMO_USER_ID,
+        # Keep the provider budget per anonymous client instead of sharing one
+        # global "demo" allowance across every visitor to the public site.
+        user_id=f"demo:{client_ip}",
         analysis=analysis,
         purchase_analysis=purchase_analysis,
     )

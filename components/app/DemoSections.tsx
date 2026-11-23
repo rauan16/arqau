@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useLocale, useTranslation } from "@/lib/language-context";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import {
   addDemoTransaction,
   commitDemoState,
@@ -783,6 +783,7 @@ type ChatMessage = {
     delivery_info?: string | null;
   }[];
   error?: string;
+  retryMessage?: string;
   fallbackUsed?: boolean;
   provider?: string | null;
   fallbackReason?: string | null;
@@ -1068,13 +1069,35 @@ addMessage({
         product_search_results: response.product_search_results || [],
       });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : locale === "ru" ? "Ошибка отправки вопроса." : "Failed to send question.";
+      let message: string;
+      if (err instanceof ApiError && err.status === 429) {
+        const wait = err.retryAfter;
+        message = locale === "ru"
+          ? wait !== null
+            ? `Слишком много запросов. Повторите через ${wait} сек.`
+            : "Слишком много запросов. Повторите попытку позже."
+          : wait !== null
+            ? `Too many requests. Try again in ${wait} seconds.`
+            : "Too many requests. Please try again later.";
+      } else if (err instanceof ApiError && err.status >= 500) {
+        message = locale === "ru"
+          ? "Сервис ИИ временно недоступен. Попробуйте еще раз."
+          : "The AI service is temporarily unavailable. Please try again.";
+      } else if (err instanceof TypeError) {
+        message = locale === "ru"
+          ? "Не удалось подключиться к ARQAU. Проверьте интернет и повторите попытку."
+          : "Could not connect to ARQAU. Check your connection and try again.";
+      } else {
+        message = err instanceof Error
+          ? err.message
+          : locale === "ru" ? "Ошибка отправки вопроса." : "Failed to send question.";
+      }
       setError(message);
       addMessage({
         role: "assistant",
         content: message,
         error: message,
+        retryMessage: text,
       });
     } finally {
       setIsSending(false);
@@ -1083,11 +1106,10 @@ addMessage({
 
   const handleRetry = (index: number) => {
     const message = messages[index];
-    if (!message || message.role !== "assistant" || !message.error) return;
+    if (!message || message.role !== "assistant" || !message.error || !message.retryMessage) return;
     setMessages((prev) => prev.filter((_, i) => i !== index));
-    setIsSending(true);
     setError(null);
-    handleSend(new Event("submit") as unknown as React.FormEvent, message.content);
+    handleSend(new Event("submit") as unknown as React.FormEvent, message.retryMessage);
   };
 
   const renderFinancialCard = (calc: ChatMessage["calculations"]) => {
